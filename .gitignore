@@ -1,0 +1,7 @@
+wizwam-code-review/
+screenshots/
+pasted_logs/
+venv/
+.venv/
+__pycache__/
+output.log
