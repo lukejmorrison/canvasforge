@@ -11,3 +11,6 @@
 - **Better export management:** Support manual filename entry, recent-save history, and optional JPEG/SVG exports.
 - **Undo/redo polish:** Expand undo granularity for selection overlays, flatten operations, and save-directory changes.
 - **Packaging:** Provide a platform-specific bundle (AppImage/Windows installer) so users can run CanvasForge without a dev environment.
+- **SVG editing & morphing:** Provide on-canvas vector node editing, path combination, and shape-morphing tools so pasted SVGs stay fully editable.
+- **SVG template library:** Let users pin favorite SVG snippets/templates to a palette for single-click insertion.
+- **Mojo compilation experiment:** Investigate compiling core routines with Modular's Mojo to evaluate performance gains.
