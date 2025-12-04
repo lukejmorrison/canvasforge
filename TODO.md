@@ -4,6 +4,10 @@
 
 - **Shape stretching:** Add edge handles that scale items non-uniformly (corners remain uniform) without degrading raster quality; selection overlay math must update bounding boxes accordingly.
 - **Fill tool + eyedropper:** Introduce a fill mode with a zoomed preview eyedropper, allowing users to sample on-canvas colors and fill selection cutouts or shapes.
+ 
+## Medium Priority
+
+- **CanvasForge Image Library:** Create the Image Library panel described in `featurerequest/CanvasForge_Image_Library.md`, surfacing screenshots with thumbnails/search/sort, drag-to-canvas, and metadata details as a docked sidebar.
 
 ## Planned Enhancements
 
