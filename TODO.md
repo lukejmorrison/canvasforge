@@ -11,6 +11,8 @@
 
 ## Planned Enhancements
 
+- **Theme toggle:** Add a settings option to switch between Light and Dark modes (currently defaults to Dark).
+- **Icon Customization UI:** Interface to easily swap toolbar icons without manually renaming files. (Note: Manual replacement is now supported via `assets/toolbar_icons/`)
 - **Color/asset palettes:** Persist frequently used colors, callouts, and text styles for faster reuse across sessions.
 - **Better export management:** Support manual filename entry, recent-save history, and optional JPEG/SVG exports.
 - **Undo/redo polish:** Expand undo granularity for selection overlays, flatten operations, and save-directory changes.

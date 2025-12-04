@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QPainter, QIcon, QPen, QColor, QBrush,
-					 QFont, QTransform, QClipboard, QImage, QKeySequence, QTextCursor)
+					 QFont, QTransform, QClipboard, QImage, QKeySequence, QTextCursor, QPalette)
 from PyQt6.QtCore import (Qt, QMimeData, QPointF, QPoint, pyqtSignal, QRectF, QTimer,
 		  QByteArray, QBuffer, QIODevice, QSizeF, QUrl, QSettings)
 from pathlib import Path
@@ -1325,9 +1325,32 @@ class CanvasView(QGraphicsView):
 			self._drawing_item = None
 
 
+def apply_dark_theme(app):
+	app.setStyle("Fusion")
+	dark_palette = QPalette()
+	dark_palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
+	dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
+	dark_palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
+	dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
+	dark_palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
+	dark_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
+	dark_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
+	dark_palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
+	dark_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
+	dark_palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
+	dark_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
+	dark_palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
+	dark_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.black)
+	app.setPalette(dark_palette)
+
+
 class MainWindow(QMainWindow):
 	def __init__(self):
 		super().__init__()
+		
+		def get_icon(name):
+			return QIcon(os.path.join(os.path.dirname(__file__), "assets", "toolbar_icons", name))
+
 		self.setWindowTitle("CanvasForge")
 		self.setGeometry(100, 100, 1200, 800)
 		self.fill_mode = FillMode.TRANSPARENT
@@ -1364,80 +1387,83 @@ class MainWindow(QMainWindow):
 		main_layout.addWidget(right_widget, 1)
 
 		self.toolbar = QToolBar("Tools")
+		self.toolbar.setIconSize(QSizeF(48, 48).toSize())
+		self.toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+		self.toolbar.setStyleSheet("QToolButton { font-size: 10pt; font-weight: bold; }")
 		self.addToolBar(self.toolbar)
 
-		pointer_action = QAction("Pointer", self)
+		pointer_action = QAction(get_icon("toolbar_icon_pointer_95x108.png"), "Pointer", self)
 		pointer_action.triggered.connect(lambda: self.view.set_tool(ToolType.SELECT))
 		self.toolbar.addAction(pointer_action)
 
-		select_action = QAction("Select", self)
+		select_action = QAction(get_icon("toolbar_icon_selection_121x108.png"), "Select", self)
 		select_action.setShortcut("S")
 		select_action.triggered.connect(lambda: self.view.set_tool(ToolType.SELECTION))
 		self.toolbar.addAction(select_action)
 
-		move_action = QAction("Move", self)
+		move_action = QAction(get_icon("toolbar_icon_move_88x108.png"), "Move", self)
 		move_action.triggered.connect(lambda: self.view.set_tool(ToolType.MOVE))
 		self.toolbar.addAction(move_action)
 
-		rotate_action = QAction("Rotate", self)
+		rotate_action = QAction(get_icon("toolbar_icon_rotate_64x64.svg"), "Rotate", self)
 		rotate_action.triggered.connect(lambda: self.view.set_tool(ToolType.ROTATE))
 		self.toolbar.addAction(rotate_action)
 
-		scale_action = QAction("Scale", self)
+		scale_action = QAction(get_icon("toolbar_icon_scale_64x64.svg"), "Scale", self)
 		scale_action.triggered.connect(lambda: self.view.set_tool(ToolType.SCALE))
 		self.toolbar.addAction(scale_action)
 
-		delete_action = QAction("Delete", self)
+		delete_action = QAction(get_icon("toolbar_icon_eraser_99x108.png"), "Delete", self)
 		delete_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Delete))
 		delete_action.triggered.connect(self.delete_selected_items)
 		self.toolbar.addAction(delete_action)
 
-		align_action = QAction("Snap Grid", self)
+		align_action = QAction(get_icon("toolbar_icon_snap_grid_64x64.svg"), "Snap Grid", self)
 		align_action.triggered.connect(lambda: self.view.set_tool(ToolType.ALIGN_GRID))
 		self.toolbar.addAction(align_action)
 
-		bring_fwd_action = QAction("Bring Forward", self)
+		bring_fwd_action = QAction(get_icon("toolbar_icon_bring_forward_64x64.svg"), "Bring Forward", self)
 		bring_fwd_action.triggered.connect(lambda: self.adjust_layer_z(-1))
 		self.toolbar.addAction(bring_fwd_action)
 
-		send_back_action = QAction("Send Backward", self)
+		send_back_action = QAction(get_icon("toolbar_icon_send_backward_64x64.svg"), "Send Backward", self)
 		send_back_action.triggered.connect(lambda: self.adjust_layer_z(1))
 		self.toolbar.addAction(send_back_action)
 
 		self.toolbar.addSeparator()
 
-		rect_action = QAction("Rectangle", self)
+		rect_action = QAction(get_icon("toolbar_icon_shape_93x108.png"), "Rectangle", self)
 		rect_action.triggered.connect(lambda: self.view.set_tool(ToolType.RECTANGLE))
 		self.toolbar.addAction(rect_action)
 
-		ellipse_action = QAction("Ellipse", self)
+		ellipse_action = QAction(get_icon("toolbar_icon_shape_93x108.png"), "Ellipse", self)
 		ellipse_action.triggered.connect(lambda: self.view.set_tool(ToolType.ELLIPSE))
 		self.toolbar.addAction(ellipse_action)
 
-		text_action = QAction("Text", self)
+		text_action = QAction(get_icon("toolbar_icon_text_79x108.png"), "Text", self)
 		text_action.triggered.connect(lambda: self.view.set_tool(ToolType.TEXT))
 		self.toolbar.addAction(text_action)
 
 		file_menu = self.menuBar().addMenu("File")
-		open_action = QAction("Open Images", self)
+		open_action = QAction(get_icon("toolbar_icon_open_94x108.png"), "Open Images", self)
 		open_action.triggered.connect(self.open_images)
 		file_menu.addAction(open_action)
 
-		paste_action = QAction("Paste", self)
+		paste_action = QAction(get_icon("toolbar_icon_paste_237x108.png"), "Paste", self)
 		paste_action.setShortcut("Ctrl+V")
 		paste_action.triggered.connect(self.paste_image)
 		file_menu.addAction(paste_action)
 
-		save_action = QAction("Save", self)
+		save_action = QAction(get_icon("toolbar_icon_save_as_111x108.png"), "Save", self)
 		save_action.setShortcut(QKeySequence.StandardKey.Save)
 		save_action.triggered.connect(self.save_canvas)
 		file_menu.addAction(save_action)
 
-		flatten_selected_action = QAction("Flatten Selected", self)
+		flatten_selected_action = QAction(get_icon("toolbar_icon_flatten_selected_64x64.svg"), "Flatten Selected", self)
 		flatten_selected_action.triggered.connect(self.flatten_selected)
 		self.toolbar.addAction(flatten_selected_action)
 
-		flatten_all_action = QAction("Flatten All", self)
+		flatten_all_action = QAction(get_icon("toolbar_icon_flatten_all_137x108.png"), "Flatten All", self)
 		flatten_all_action.triggered.connect(self.flatten_all)
 		self.toolbar.addAction(flatten_all_action)
 
@@ -1702,6 +1728,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
 	app = QApplication(sys.argv)
+	apply_dark_theme(app)
 	window = MainWindow()
 	window.show()
 	sys.exit(app.exec())

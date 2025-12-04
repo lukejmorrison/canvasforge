@@ -9,6 +9,7 @@ CanvasForge is a PyQt6-powered canvas utility focused on quickly remixing screen
 - **Text tooling:** Double-click to edit text items with proper cursor management; escape exits edit mode cleanly.
 - **Flattening & saving:** Convert selected layers or the entire scene into new raster artifacts, then auto-save to a Pictures/CanvasForge folder (configurable in settings). Blue control handles are hidden before rendering so exports stay clean.
 - **Layer + artifact lists:** Side panels keep imported resources and active scene layers in sync, supporting Ctrl/Cmd multi-select for flattening or deletion.
+- **Dark Mode & Custom Icons:** The application features a sleek dark mode and uses external icon files in `assets/toolbar_icons/`. Users can customize the toolbar by replacing these images. Placeholder SVGs are provided for tools without specific icons.
 
 ## Getting Started
 1. **Clone the repo**

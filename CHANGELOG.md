@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 - Track new tooling such as stretch handles, fill/eyedropper workflows, Mojo experiments, SVG morphing, and future export options.
 
+## [2025-12-04 17:15] UI Polish & Placeholders
+- **Updated:** Toolbar icons are now larger (48x48) and use a consistent font style (bold, 10pt) with text displayed under the icons for better readability on high-res monitors.
+- **Added:** Placeholder SVG icons for tools that previously lacked graphics (Rotate, Scale, Snap Grid, etc.), allowing for easy customization by replacing the file.
+
+## [2025-12-04 17:00] Dark Mode & Icon Refresh
+
+- **Added:** Dark mode support using the Fusion style and a custom dark palette for a modern, premium look.
+- **Updated:** Toolbar icons are now loaded from `assets/toolbar_icons/` with resolution-specific filenames (e.g., `toolbar_icon_pointer_95x108.png`), making it easy for users to customize the interface by replacing these files.
+- **Refactored:** Renamed all toolbar assets to match their tool/feature usage for better clarity and maintainability.
+
 ## [2025-12-03 23:38] Late-night flatten & save polish (see `CanvasForge_251203_v15.md`)
 
 - **Added:** `Flatten Selected`/`Flatten All`, Delete, Bring Forward, Send Backward, and status-bar cursor readouts, giving the layer list parity with scene operations.
