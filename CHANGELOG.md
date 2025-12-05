@@ -6,7 +6,20 @@ All notable changes to this project will be documented in this file.
 
 - Track new tooling such as stretch handles, fill/eyedropper workflows, Mojo experiments, SVG morphing, and future export options.
 
+## [2025-12-05 09:00] Branded desktop icon & installer
+
+- **Added:** New `assets/app_icons/canvasForge_app_icon.png` art now powers the main window icon so CanvasForge looks branded in the Pop!_OS dock and task switcher.
+- **Updated:** `scripts/install_canvasforge.sh` copies the new icon into the system icon cache and keeps the `.desktop` entry under Audio & Video in sync.
+- **Documented:** `README.md` now calls out the desktop-ready icon plus the helper installer script.
+- **New:** Flatpak manifest (`flatpak/com.lukejmorrison.CanvasForge.yml`) plus `scripts/build_flatpak.sh` automate sandboxed installs via `flatpak-builder` for Pop!_OS, auto-installing the KDE 6.8 runtime/SDK on first run and caching PyPI wheels on the host so the sandbox builds offline.
+
+## [2025-12-04 17:30] Simplified Icon Loading
+
+- **Refactored:** Removed resolution information from icon filenames (e.g., `toolbar_icon_pointer.png`) for easier maintenance and customization.
+- **Improved:** `get_icon()` now supports automatic format detection, prioritizing `.png` files and falling back to `.svg` if a PNG is not found. This allows users to mix and match file types without changing code.
+
 ## [2025-12-04 17:15] UI Polish & Placeholders
+
 - **Updated:** Toolbar icons are now larger (48x48) and use a consistent font style (bold, 10pt) with text displayed under the icons for better readability on high-res monitors.
 - **Added:** Placeholder SVG icons for tools that previously lacked graphics (Rotate, Scale, Snap Grid, etc.), allowing for easy customization by replacing the file.
 

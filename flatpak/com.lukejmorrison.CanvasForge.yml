@@ -1,0 +1,31 @@
+app-id: com.lukejmorrison.CanvasForge
+runtime: org.kde.Platform
+runtime-version: '6.8'
+sdk: org.kde.Sdk
+command: canvasforge
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=xdg-pictures:create
+  - --filesystem=xdg-download
+modules:
+  - name: canvasforge
+    buildsystem: simple
+    sources:
+      - type: dir
+        path: ..
+    build-commands:
+      - install -Dm755 flatpak/run_canvasforge.sh /app/bin/canvasforge
+      - install -Dm644 flatpak/com.lukejmorrison.CanvasForge.desktop /app/share/applications/com.lukejmorrison.CanvasForge.desktop
+      - install -Dm644 assets/app_icons/canvasForge_app_icon.png /app/share/icons/hicolor/512x512/apps/com.lukejmorrison.CanvasForge.png
+      - mkdir -p /app/share/canvasforge
+      - install -Dm644 main.py /app/share/canvasforge/main.py
+      - install -Dm644 requirements.txt /app/share/canvasforge/requirements.txt
+      - cp -r assets /app/share/canvasforge/
+      - if [ -d artifacts ]; then cp -r artifacts /app/share/canvasforge/; fi
+      - if [ -d pasted_logs ]; then cp -r pasted_logs /app/share/canvasforge/; fi
+      - python3 -m venv /app/canvasforge-venv
+      - if [ -d flatpak/vendor ]; then cp -r flatpak/vendor /app/share/canvasforge/vendor; fi
+      - source /app/canvasforge-venv/bin/activate && pip install --no-cache-dir --no-index --find-links /app/share/canvasforge/vendor/wheels -r /app/share/canvasforge/requirements.txt

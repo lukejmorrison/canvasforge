@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=CanvasForge
+Comment=Remix screenshots, snippets, and vectors
+Exec=canvasforge
+Icon=com.lukejmorrison.CanvasForge
+Terminal=false
+Categories=AudioVideo;Graphics;
