@@ -10,6 +10,9 @@ finish-args:
   - --device=dri
   - --filesystem=xdg-pictures:create
   - --filesystem=xdg-download
+  # Force X11 backend to prevent NVIDIA+Wayland compositor lockups
+  # See: featurerequest/ProblemLog_WaylandCosmicLockup.md
+  - --env=QT_QPA_PLATFORM=xcb
 modules:
   - name: canvasforge
     buildsystem: simple
@@ -22,6 +25,7 @@ modules:
       - install -Dm644 assets/app_icons/canvasForge_app_icon.png /app/share/icons/hicolor/512x512/apps/com.lukejmorrison.CanvasForge.png
       - mkdir -p /app/share/canvasforge
       - install -Dm644 main.py /app/share/canvasforge/main.py
+      - install -Dm644 image_library_panel.py /app/share/canvasforge/image_library_panel.py
       - install -Dm644 requirements.txt /app/share/canvasforge/requirements.txt
       - cp -r assets /app/share/canvasforge/
       - if [ -d artifacts ]; then cp -r artifacts /app/share/canvasforge/; fi

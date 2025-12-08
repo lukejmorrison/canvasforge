@@ -1,121 +1,129 @@
 # Feature Request: CanvasForge Image Library
 
 ## Document Metadata
-- **Title**: CanvasForge Image Library Integration
-- **Version**: 1.0
-- **Date**: December 04, 2025
-- **Author**: Grok (xAI Assistant)
-- **Status**: Draft for Review
-- **Priority**: Medium (Enhances discoverability and workflow efficiency without altering core editing logic)
-- **Estimated Effort**: 4-6 hours for implementation; 1-2 days including testing and edge cases
-- **Related Artifacts**: 
-  - CHANGELOG.md (Reference: [2025-12-04 11:34] Image Library Integration)
-  - TODO.md (Add under "Medium Priority" as detailed in attachment)
-  - Screenshot: Provided UI mockup showing sidebar layout with thumbnails, sort/zoom controls, and properties panel
+| Field | Value |
+| --- | --- |
+| Doc ID | FR-20251204-ImageLibrary |
+| Version | v1.1 |
+| Date | 2025-12-06 11:00 |
+| Owner / Author | Grok (xAI Assistant) |
+| Status | Draft |
+| Priority | Medium |
+| Changelog Tag | [Unreleased] CanvasForge Image Library |
+| Related Files | main.py; assets/toolbar_icons/; TODO.md; README.md |
+
+## Project Context
+- `main.py` hosts everything: `MainWindow` builds a `QHBoxLayout` with `CanvasView` (3/4 width) and a right-side `QVBoxLayout` for the Repository (`ArtifactList`) and Layers (`LayerList`).
+- `CanvasView` already supports drag/drop from `ArtifactList`, clipboard pastes, and exports (flatten) via `MainWindow` helpers; it is the correct integration point for dropping library thumbnails directly to the canvas.
+- Asset folders: `assets/toolbar_icons/` (already in use) and `assets/app_icons/` (window icon). A future `assets/image_library/` space may store UI art or cached thumbnails if needed.
+- Persistence/logging: screenshots of pasted assets live under `pasted_logs/`, flattened renders under `artifacts/`, and user exports default to `~/Pictures/CanvasForge`. The library should monitor `~/Pictures/Screenshots` (with fallbacks) without disturbing those existing flows.
+- Packaging: `flatpak/com.lukejmorrison.CanvasForge.yml` and `scripts/install_canvasforge.sh` must copy any new library assets or schema defaults so sandboxed builds can still find the screenshot folder.
 
 ## Overview
-The CanvasForge Image Library introduces a dedicated panel for browsing and managing image assets sourced from the user's OS-specific Screenshots folder (e.g., `~/Pictures/Screenshots`). This feature provides a visual repository of saved or captured files, enabling seamless drag-and-drop integration with the canvas, thumbnail previews, sorting, search, and zoom controls. It positions the library as a left sidebar (vertical strip) or optional bottom panel, complementing the existing Repository and Layers panels without disrupting the 3:1 canvas dominance.
+The CanvasForge Image Library introduces a dedicated panel for browsing and managing screenshot assets sourced from the user’s OS-specific Screenshots folder (for example `~/Pictures/Screenshots` on Pop!_OS). It provides thumbnail previews, sorting, search, zoom controls, and drag-to-canvas import so users can reference captured material without leaving CanvasForge. The widget docks alongside the Repository and Layers panels to preserve the 3:1 canvas dominance while keeping external assets one click away.
 
-This enhancement addresses a key usability gap: Users currently lack an at-a-glance view of external assets, requiring manual file navigation. By auto-monitoring the Screenshots directory, the library fosters a closed-loop workflow—capture externally, browse/import effortlessly, edit on-canvas, and export back to the folder.
+## Goals
+- **Improve Asset Discoverability**: Keep recent screenshots visible so designers avoid manual file navigation.
+- **Streamline Import/Export**: Enable drag-to-canvas and provide a one-click export button that flattens scenes back into the monitored Screenshots folder.
+- **Enhance Workflow Efficiency**: Offer sort/search/zoom controls so large screenshot libraries stay manageable.
+- **Remain Modular**: Encapsulate the feature inside a reusable widget that could later move into a `widgets/` package or native binding layer.
 
-## Goals and Objectives
-### Primary Goals
-- **Improve Asset Discoverability**: Allow users to visualize and access recent screenshots/captures directly within the app, reducing context-switching to file explorers.
-- **Streamline Import/Export**: Enable one-click loading of library items to the canvas and automatic syncing of exports to the Screenshots folder.
-- **Enhance Workflow Efficiency**: Support sorting (by date modified/created, name, size), search, and zoom for quick scanning of large libraries.
+## Requirements
 
-### Secondary Objectives
-- **Modular Design**: Ensure the feature is self-contained (e.g., via a reusable QWidget) for future refactoring to low-level languages (e.g., Rust/C++), aligning with Graphite.rs/Inkscape integration goals.
-- **Cross-Platform Compatibility**: Dynamically detect OS paths for Screenshots folder; fallback to `~/Pictures` if unavailable.
-- **Performance Optimization**: Use efficient Qt models to handle 100+ files without lag; implement lazy loading for thumbnails.
+### Architecture Fit
+- Replace the current `main_layout = QHBoxLayout(...)` arrangement with a `QSplitter` stack: `[ImageLibraryPanel | CanvasView | RightSidebar]`. This keeps proportional resizing while allowing the library to collapse when not in use.
+- Introduce an `ImageLibraryPanel(QWidget)` in a new module (for example `image_library_panel.py`) that exposes signals such as `assetActivated(path: Path)` and `exportRequested()`.
+- Keep Repository (`ArtifactList`) and Layers (`LayerList`) untouched so existing project flows remain stable.
+- Provide a lightweight `ImageMetadataDock` (optional) as a `QDockWidget` or footer inside the panel to surface the selected file’s name, size, and modified date.
 
-### Non-Goals
-- Full file management (e.g., rename/delete in-app; defer to OS tools).
-- Advanced editing in the library view (e.g., cropping; use canvas for that).
-- Non-image formats (focus on PNG/JPG/SVG/GIF; extend via filters if needed).
+### Functional Requirements
+1. **Library Panel Widget**
+   - Resizable sidebar hosted in the splitter; default width ~220px.
+   - Header row with folder selector (All / Favorites / Custom paths), a search field, and refresh button.
+   - Center grid using `QListView` or `QGridView` in IconMode, displaying 100px thumbnails with selection highlighting.
+   - Footer bar with sort dropdown (Date Modified ↓ default, Date Created, Name, Size), zoom slider (50%-200%), and an `Export Canvas` button tied to flattening.
+2. **Data Binding**
+   - `QFileSystemModel` (root = detected Screenshots folder; fallback to `~/Pictures` then `~/Pictures/CanvasForge`).
+   - `QSortFilterProxyModel` for search text and sorting strategy.
+   - `QFileSystemWatcher` (or polling timer) to refresh the proxy when new files appear.
+   - Acceptable formats: `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.webp`, `.svg`.
+3. **Interactions**
+   - Dragging a thumbnail emits a `mimeData` payload with `Qt.Url` entries so `CanvasView.dropEvent` can reuse `_paste_file_path` (already implemented).
+   - Double-clicking a thumbnail emits `assetActivated(path)`; `MainWindow` calls `add_artifact(path)` and drops the new layer near the viewport center.
+   - Selection updates the properties footer plus a preview swatch.
+   - Export button triggers `MainWindow.flatten_all` (or selected layers) and writes to the monitored folder with timestamped filenames (e.g., `canvas_export_YYYYMMDD_HHMM.png`).
 
-## User Personas and Stories
-### Target Personas
-- **Primary: Creative Professional (e.g., Designer)**: Uses CanvasForge for rapid prototyping; needs quick access to screenshots for reference or cutouts.
-- **Secondary: Developer/Tester**: Captures app states frequently; values auto-refresh and drag-to-canvas for iterative workflows.
+### UI & Accessibility
+- Follow the existing dark palette (Fusion style) so the panel blends into the theme.
+- Provide keyboard navigation: arrow keys move selection, `Enter` imports, `Ctrl+F` focuses the search box, and `Ctrl+R` refreshes the folder.
+- Display tooltips for buttons and show file metadata inline (name, resolution, size, modified date).
+- Persist splitter sizes via `QSettings` using the same key family already used for `default_save_dir`.
 
-### User Stories
-- As a designer, I want to see thumbnails of my recent screenshots in a sidebar so I can drag relevant ones to the canvas without opening Finder/Explorer.
-- As a user, I want to sort/search the library by date/name/size so I can locate specific captures quickly.
-- As a tester, I want the library to auto-refresh when new screenshots are added so I don't need to restart the app.
-- As a creative, I want a zoom slider for thumbnails so I can preview details without committing to full import.
+### Non-Functional Requirements
+- Load 100 thumbnails in <500ms and remain responsive with 500+ files via lazy thumbnail creation (store `QPixmap` cache keyed by absolute path + mtime).
+- No new pip dependencies; rely entirely on PyQt6 components already bundled.
+- Read-only access to the screenshot folder unless exporting; validate write permissions before enabling the export button.
+- Strings routed through existing translation hooks so future `QtLinguist` work can localize labels.
 
-## Functional Requirements
-### Core Components
-1. **Library Panel Widget**:
-   - Vertical sidebar (left edge, ~200px wide; resizable via QSplitter) or horizontal bottom bar (alternative).
-   - Top section: Search bar (QLineEdit) and folder navigation (QListView for subfolders like "All Files", "Images").
-   - Middle section: Thumbnail grid (QGridView in IconMode; auto-adjust rows/columns).
-   - Bottom section: Sort dropdown (QComboBox: Date Modified/Created, Name, Size), zoom slider (QSlider: 50-200%), and Export button (ties to flatten).
+### Technical Notes
+- Restructure `MainWindow` to:
+  1. Instantiate `ImageLibraryPanel` before `CanvasView`.
+  2. Replace `main_layout.addWidget(...)` with a `QSplitter(Qt.Horizontal)` where index 0 = library, 1 = canvas, 2 = right sidebar.
+  3. Connect panel signals:
+     - `panel.assetActivated.connect(self._import_library_asset)`
+     - `panel.assetDropped.connect(self._drop_asset_onto_canvas)` (optional helper)
+     - `panel.exportRequested.connect(self.flatten_all)` (or new method that calls `_flatten_items`).
+- Extend `CanvasView.dragEnterEvent`/`dropEvent` to accept `mimeData.hasUrls()` so library drags behave like OS file drops (existing `_paste_file_path` already handles this path).
+- Share the screenshot-path resolver between the panel and `MainWindow` (utility like `paths.get_screenshot_folder()` to keep logic centralized). Store the chosen folder in `QSettings("CanvasForge", "CanvasForge")` under `screenshot_library_dir`.
+- Consider optional `ImageLibraryController` class to wrap model/watcher logic, simplifying unit tests.
 
-2. **Data Binding**:
-   - Use QFileSystemModel filtered to image extensions (*.png, *.jpg, *.jpeg, *.gif, *.svg).
-   - Root path: Dynamically resolve OS Screenshots folder (macOS/Linux: `~/Pictures/Screenshots`; Windows: `%USERPROFILE%\Pictures\Screenshots`).
-   - Proxy model (QSortFilterProxyModel) for search/sorting; custom roles for dates/sizes.
+## Dependencies
+- `main.py`: `MainWindow`, `CanvasView`, `add_artifact`, flatten helpers.
+- Qt classes from PyQt6 already vendored with the flatpak wheels: `QFileSystemModel`, `QSortFilterProxyModel`, `QFileSystemWatcher`, `QSplitter`, `QStyledItemDelegate`, `QSettings`.
+- Installer + Flatpak scripts must ensure the screenshot folder path is accessible or documented for sandbox permissions.
 
-3. **Interactions**:
-   - **Drag-and-Drop**: Thumbnails draggable to canvas (mimeData with file paths; extend dropEvent to load via add_artifact).
-   - **Double-Click**: Loads selected image to canvas as a new layer.
-   - **Selection**: Updates a right-docked Properties panel with metadata (name, size, date, preview).
-   - **Auto-Refresh**: QFileSystemWatcher monitors root path; refresh model on changes.
-   - **Export**: Button flattens current canvas and saves to Screenshots folder with timestamp (e.g., "canvas_export_20251204_1134.png").
-
-### UI/UX Guidelines (Based on Screenshot)
-- **Layout Alignment**: Left sidebar with dark theme (match app: #1e1e1e background, #ffffff text).
-- **Thumbnails**: 100px base size (scalable); icons via QFileIconProvider; grid spacing 10px.
-- **Controls**: Compact horizontal bar at bottom; sort defaults to "Date Created" descending; zoom at 100%.
-- **Properties Panel**: Docked right (QDockWidget); shows file info in a form layout (QLabel pairs).
-- **Accessibility**: Keyboard navigation (arrow keys for thumbnails); tooltips on hover.
-
-## Non-Functional Requirements
-- **Performance**: Handle 500+ files with <500ms load time; lazy thumbnail generation.
-- **Compatibility**: PyQt6 6.5+; cross-platform (test on Linux/Windows/macOS).
-- **Security**: Read-only access to Screenshots folder; no execution of files.
-- **Localization**: English default; extensible via Qt translations.
-- **Error Handling**: Graceful fallbacks (e.g., create folder if missing); log to output.log.
-
-## Technical Implementation Notes
-- **Dependencies**: No new pip installs (leverage Qt natives: QFileSystemModel, QSortFilterProxyModel, QFileSystemWatcher).
-- **Integration Points**:
-  - MainWindow.__init__: Add splitter and call create_library_panel().
-  - CanvasView.dropEvent: Extend for url mimeData.
-  - Flatten_scene: Optional path parameter for library exports.
-- **Extensibility**: Abstract panel as a mixin for future ports (e.g., Rust: qt-rs bindings).
-- **Testing**: Unit tests for path resolution/sort; manual: Add screenshot, verify drag/refresh.
-
-## Dependencies and Risks
-- **Dependencies**: Existing add_artifact/flatten_scene methods; QFileSystemModel (Qt standard).
-- **Risks**:
-  - Path Variability: Mitigate with os.path.exists checks and user config fallback.
-  - Performance on Large Folders: Risk of lag; mitigate with pagination (QPageSize).
-  - Theme Mismatch: Ensure stylesheet consistency.
+## Risks
+- **Path Variability**: Some distros rename the Screenshots folder. Mitigate with `QStandardPaths.PicturesLocation` + user override UI.
+- **Performance**: Very large folders (>1,000 images) could lag. Use background thumbnail generation (`QtConcurrent` or queued `QTimer.singleShot`) and cache results.
+- **Sandbox Permissions**: Flatpak builds may not have direct access to `~/Pictures/Screenshots`. Document the required portal permissions and consider adding a folder picker fallback.
+- **Theme Drift**: New widgets should reuse the dark palette; share stylesheets so sliders/buttons match the toolbar aesthetic.
 
 ## Success Metrics
-- **Quantitative**: 80% reduction in import time (user survey); library loads <2s for 100 files.
-- **Qualitative**: Positive feedback on workflow (e.g., "Easier to reference screenshots"); no crashes in 10-session tests.
-- **Adoption**: 50% of exports route through library in beta usage.
+- Library loads in <2s for 100 images on Pop!_OS reference hardware (after thumbnails cached).
+- Drag-and-drop from the library creates scene items with no console warnings.
+- Export button writes flattened PNGs to the monitored folder with correct timestamps and hides overlay handles (reusing the existing flatten logic).
+- User testing shows at least a 50% reduction in context switches to the OS file manager during workshops.
+
+## Implementation Plan
+| Step | Scope | Key Files / Classes | Notes |
+| --- | --- | --- | --- |
+| 1 | Create `image_library_panel.py` with `ImageLibraryPanel`, `ImageLibraryProperties`, and a shared path resolver helper. | `image_library_panel.py` (new) | Build UI scaffold, wire up `QFileSystemModel` + proxy, expose Qt signals. |
+| 2 | Swap `QHBoxLayout` for `QSplitter` in `MainWindow` so the library can dock left of `CanvasView`. | `main.py` (`MainWindow.__init__`) | Remove fixed stretch factors; persist splitter widths via `QSettings`. |
+| 3 | Connect panel signals to new slots: `_import_library_asset`, `_export_canvas_to_library`, `_set_library_root`. | `main.py` | Slots should reuse `add_artifact`, `flatten_all`, and `save_canvas` logic rather than duplicating code. |
+| 4 | Extend `CanvasView` drag/drop to accept file URLs emitted by the library panel. | `CanvasView.dragEnterEvent`, `dropEvent`, `_paste_file_path` | Accept `mimeData.hasUrls()` even when the source is the library widget, ensuring consistent behavior across OS drags. |
+| 5 | Add screenshot-path setting + picker so users can retarget the library if their OS stores captures elsewhere. | `main.py` (new menu action) | Store under `screenshot_library_dir`; update watcher + panel when changed. |
+| 6 | Update docs and TODO: mention the new sidebar, include a troubleshooting note in `README.md`, and add a Medium-priority TODO entry. | `README.md`, `TODO.md` | README section should explain how to enable/disable the panel and where files are read from. |
+| 7 | QA + polish: test on Pop!_OS and Windows, ensure Flatpak manifest bundles any new modules, capture screenshots for release notes. | Manual tests, `flatpak/` manifest | Document findings in `CHANGELOG.md` before release. |
+
+## Test Plan
+- **Model tests**: Unit-test the path resolver and sorter using a temporary directory populated with fake screenshots (Qt Test or pytest-qt if introduced later).
+- **Manual smoke**: Create 200 dummy PNGs, verify scroll/zoom/search performance, drag thumbnails to various canvas zoom levels, and confirm exported files hide selection overlays.
+- **Regression**: Re-run flatten/save workflows to ensure existing behavior is unchanged when the library panel is collapsed or disabled.
+- **Flatpak**: Build via `scripts/build_flatpak.sh`, confirm the sandbox can read the screenshot folder (or show a dialog requesting access).
 
 ## Next Steps
-1. **Review and Prioritize**: Add to TODO.md under "Medium Priority" (as scripted below).
-2. **Implementation**: Assign to Coding Agent; target merge by Dec 05, 2025.
-3. **Testing/QA**: Validate on Pop!_OS (per logs); edge cases in screenshots/. 
+1. Land Steps 1-4 in a feature branch, including unit tests for the resolver where feasible.
+2. Update README/TODO/Flatpak manifest (Steps 5-6) and gather screenshots for release notes.
+3. Draft the `[YYYY-MM-DD HH:MM] Image Library` changelog entry once the feature merges; update this doc’s `Changelog Tag` plus timeline row to the final timestamp.
 
----
+## Timeline
 
-### Script to Update TODO.md
-To automate addition to your TODO.md, run this in your project root (or via Coding Agent):
+| Date (UTC) | Event |
+| --- | --- |
+| 2025-12-06 18:20 | `[Unreleased] CanvasForge Image Library` work started: created `image_library_panel.py`, refactored `main.py` around a horizontal splitter, wired export/import signals, and documented the feature in `README.md`/`TODO.md`. |
+
 
 ```bash
 # Append to TODO.md under Medium Priority
-echo "
-- **Lightweight Demo Recording Tool:** [Existing entry...]
-
-- **CanvasForge Image Library:** Integrate left sidebar panel for Screenshots folder browsing with thumbnails, search/sort/zoom, drag-to-canvas, and properties dock (PRD: FeatureRequest_CF_ImageLibraryPRD.md)." >> TODO.md
-```
-
-This PRD provides a comprehensive blueprint for your Coding Agent to execute the feature while aligning with CanvasForge's modular ethos. Should clarifications be required, please advise.
+cat <<'EOF' >> TODO.md
+- **CanvasForge Image Library:** Integrate left sidebar panel for Screenshots folder browsing with thumbnails, search/sort/zoom, drag-to-canvas, auto-refresh, and export-to-screenshots support (see featurerequest/CanvasForge_Image_Library.md).

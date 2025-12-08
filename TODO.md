@@ -7,7 +7,7 @@
  
 ## Medium Priority
 
-- **CanvasForge Image Library:** Create the Image Library panel described in `featurerequest/CanvasForge_Image_Library.md`, surfacing screenshots with thumbnails/search/sort, drag-to-canvas, and metadata details as a docked sidebar.
+- **CanvasForge Image Library:** Track follow-up tasks for the new `image_library_panel.py` widget—add Flatpak sandbox notes, automate thumbnail stress tests, and capture release screenshots once QA completes.
 
 ## Planned Enhancements
 

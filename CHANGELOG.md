@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2025-12-08
+
+### Added
+- **Preferences Dialog:** New unified settings dialog accessible via Edit > Preferences (Ctrl+,) with organized tabs:
+  - **Folders tab:** Clear settings for "Save canvas to" (export destination) and "Screenshot folder" (image library source) with descriptions
+  - **Canvas tab:** Placeholder for future canvas-related settings
+  - **About tab:** App info, feature list, version number, and credits
+- **Image Library Panel:** New sidebar widget (`image_library_panel.py`) for browsing screenshots with thumbnails, search, sorting, and drag-to-canvas functionality
+- **Version tracking:** Added `__version__ = "1.1.0"` constant to main.py
+
+### Fixed
+- **Wayland/COSMIC lockup:** Implemented automatic X11/XWayland backend detection for NVIDIA GPUs on Wayland sessions to prevent compositor lockups. Added `--env=QT_QPA_PLATFORM=xcb` to Flatpak manifest.
+- **QFileSystemModel import:** Fixed incorrect import from `QtWidgets` to `QtGui` in image_library_panel.py
+- **Save function error handling:** Added debug logging and return value checking for `image.save()` operations
+
+### Changed
+- **Menu reorganization:** Removed separate "Change Save Folder..." and "Change Image Library Folder..." menu items in favor of unified Preferences dialog
+- **Improved UX:** Folder settings now have clear descriptions explaining their purpose
+
+### Closed Issues
+- ProblemLog_WaylandCosmicLockup.md - System lockup on Wayland+NVIDIA+COSMIC
+- ProblemLog_SaveFunctionNotWorking.md - Confusing folder settings UI
+
 ## [Unreleased]
 
 - Track new tooling such as stretch handles, fill/eyedropper workflows, Mojo experiments, SVG morphing, and future export options.

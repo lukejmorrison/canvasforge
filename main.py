@@ -4,12 +4,27 @@ import subprocess
 import os
 import time
 import math
+
+# Force X11 backend on Wayland+NVIDIA to prevent compositor lockups
+# See: featurerequest/ProblemLog_WaylandCosmicLockup.md
+if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
+    try:
+        result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=5)
+        if 'NVIDIA' in result.stdout:
+            os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
+    except Exception:
+        pass  # Fall through to default behavior
+
 from enum import Enum, auto
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphicsScene,
-				 QGraphicsPixmapItem, QListWidget,
-				 QToolBar, QFileDialog, QVBoxLayout, QWidget,
-				 QHBoxLayout, QGraphicsRectItem, QGraphicsEllipseItem, QListWidgetItem, QLabel,
-				 QAbstractItemView, QGraphicsItem, QGraphicsTextItem, QMenu)
+			 QGraphicsPixmapItem, QListWidget,
+			 QToolBar, QFileDialog, QVBoxLayout, QWidget,
+			 QGraphicsRectItem, QGraphicsEllipseItem, QListWidgetItem, QLabel,
+			 QAbstractItemView, QGraphicsItem, QGraphicsTextItem, QMenu, QSplitter,
+			 QDialog, QDialogButtonBox, QTabWidget, QFormLayout, QLineEdit,
+			 QPushButton, QHBoxLayout, QGroupBox, QFrame)
+
+__version__ = "1.1.0"
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QPainter, QIcon, QPen, QColor, QBrush,
@@ -18,6 +33,7 @@ from PyQt6.QtCore import (Qt, QMimeData, QPointF, QPoint, pyqtSignal, QRectF, QT
 		  QByteArray, QBuffer, QIODevice, QSizeF, QUrl, QSettings)
 from pathlib import Path
 import datetime
+from image_library_panel import ImageLibraryPanel
 
 
 class ToolType(Enum):
@@ -922,13 +938,13 @@ class CanvasView(QGraphicsView):
 		super().mouseReleaseEvent(event)
 
 	def dragEnterEvent(self, event):
-		if event.mimeData().hasFormat('application/x-qabstractitemmodeldatalist'):
+		if event.mimeData().hasFormat('application/x-qabstractitemmodeldatalist') or event.mimeData().hasUrls():
 			event.acceptProposedAction()
 		else:
 			super().dragEnterEvent(event)
 
 	def dragMoveEvent(self, event):
-		if event.mimeData().hasFormat('application/x-qabstractitemmodeldatalist'):
+		if event.mimeData().hasFormat('application/x-qabstractitemmodeldatalist') or event.mimeData().hasUrls():
 			event.acceptProposedAction()
 		else:
 			super().dragMoveEvent(event)
@@ -951,6 +967,12 @@ class CanvasView(QGraphicsView):
 					new_item.setPos(pos)
 					self.itemAdded.emit(new_item)
 			event.acceptProposedAction()
+		elif event.mimeData().hasUrls():
+			scene_pos = self.mapToScene(event.position().toPoint())
+			if self._try_paste_from_urls(event.mimeData(), scene_pos):
+				event.acceptProposedAction()
+				return
+			super().dropEvent(event)
 		else:
 			super().dropEvent(event)
 
@@ -1344,6 +1366,193 @@ def apply_dark_theme(app):
 	app.setPalette(dark_palette)
 
 
+class PreferencesDialog(QDialog):
+	"""Preferences dialog with organized settings sections."""
+	
+	def __init__(self, parent=None, settings=None, current_save_dir=None, current_library_dir=None):
+		super().__init__(parent)
+		self.settings = settings
+		self.setWindowTitle("Preferences")
+		self.setMinimumWidth(550)
+		self.setMinimumHeight(400)
+		
+		# Store current values
+		self._save_dir = str(current_save_dir) if current_save_dir else ""
+		self._library_dir = str(current_library_dir) if current_library_dir else ""
+		
+		# Track if values changed
+		self._save_dir_changed = False
+		self._library_dir_changed = False
+		
+		self._setup_ui()
+	
+	def _setup_ui(self):
+		layout = QVBoxLayout(self)
+		
+		# Create tab widget for organized sections
+		self.tab_widget = QTabWidget()
+		layout.addWidget(self.tab_widget)
+		
+		# Add tabs
+		self.tab_widget.addTab(self._create_folders_tab(), "Folders")
+		self.tab_widget.addTab(self._create_canvas_tab(), "Canvas")
+		self.tab_widget.addTab(self._create_about_tab(), "About")
+		
+		# Dialog buttons
+		button_box = QDialogButtonBox(
+			QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+		)
+		button_box.accepted.connect(self.accept)
+		button_box.rejected.connect(self.reject)
+		layout.addWidget(button_box)
+	
+	def _create_folders_tab(self):
+		"""Create the Folders settings tab."""
+		widget = QWidget()
+		layout = QVBoxLayout(widget)
+		layout.setSpacing(20)
+		
+		# Export Settings Group
+		export_group = QGroupBox("Export Settings")
+		export_layout = QFormLayout(export_group)
+		export_layout.setSpacing(10)
+		
+		# Save folder
+		save_folder_widget = QWidget()
+		save_folder_layout = QHBoxLayout(save_folder_widget)
+		save_folder_layout.setContentsMargins(0, 0, 0, 0)
+		self.save_folder_edit = QLineEdit(self._save_dir)
+		self.save_folder_edit.setReadOnly(True)
+		self.save_folder_edit.setPlaceholderText("Default: ~/Pictures/CanvasForge")
+		save_folder_layout.addWidget(self.save_folder_edit)
+		save_folder_btn = QPushButton("Browse...")
+		save_folder_btn.clicked.connect(self._browse_save_folder)
+		save_folder_layout.addWidget(save_folder_btn)
+		export_layout.addRow("Save canvas to:", save_folder_widget)
+		
+		# Add description
+		save_desc = QLabel("Where File > Save exports your canvas images (PNG format)")
+		save_desc.setStyleSheet("color: #888; font-size: 11px;")
+		export_layout.addRow("", save_desc)
+		
+		layout.addWidget(export_group)
+		
+		# Image Library Group
+		library_group = QGroupBox("Image Library")
+		library_layout = QFormLayout(library_group)
+		library_layout.setSpacing(10)
+		
+		# Library folder
+		library_folder_widget = QWidget()
+		library_folder_layout = QHBoxLayout(library_folder_widget)
+		library_folder_layout.setContentsMargins(0, 0, 0, 0)
+		self.library_folder_edit = QLineEdit(self._library_dir)
+		self.library_folder_edit.setReadOnly(True)
+		self.library_folder_edit.setPlaceholderText("Default: ~/Pictures/Screenshots")
+		library_folder_layout.addWidget(self.library_folder_edit)
+		library_folder_btn = QPushButton("Browse...")
+		library_folder_btn.clicked.connect(self._browse_library_folder)
+		library_folder_layout.addWidget(library_folder_btn)
+		library_layout.addRow("Screenshot folder:", library_folder_widget)
+		
+		# Add description
+		library_desc = QLabel("Source folder for the screenshot browser in the left sidebar")
+		library_desc.setStyleSheet("color: #888; font-size: 11px;")
+		library_layout.addRow("", library_desc)
+		
+		layout.addWidget(library_group)
+		
+		# Add stretch to push everything to the top
+		layout.addStretch()
+		
+		return widget
+	
+	def _create_canvas_tab(self):
+		"""Create the Canvas settings tab (placeholder for future settings)."""
+		widget = QWidget()
+		layout = QVBoxLayout(widget)
+		layout.setSpacing(20)
+		
+		# Canvas Defaults Group
+		canvas_group = QGroupBox("Canvas Defaults")
+		canvas_layout = QFormLayout(canvas_group)
+		canvas_layout.setSpacing(10)
+		
+		# Placeholder for future settings
+		placeholder = QLabel("Additional canvas settings will be available in future updates.")
+		placeholder.setStyleSheet("color: #888; font-style: italic;")
+		canvas_layout.addRow(placeholder)
+		
+		layout.addWidget(canvas_group)
+		layout.addStretch()
+		
+		return widget
+	
+	def _create_about_tab(self):
+		"""Create the About tab."""
+		widget = QWidget()
+		layout = QVBoxLayout(widget)
+		layout.setSpacing(15)
+		
+		# App info
+		title = QLabel(f"CanvasForge v{__version__}")
+		title.setStyleSheet("font-size: 18px; font-weight: bold;")
+		layout.addWidget(title)
+		
+		description = QLabel(
+			"A canvas utility for remixing screenshots and UI snippets.\n\n"
+			"Features:\n"
+			"• Infinite canvas with pan and zoom\n"
+			"• Drag and drop images from the library\n"
+			"• Text annotations and shapes\n"
+			"• Layer management\n"
+			"• Export to PNG"
+		)
+		description.setWordWrap(True)
+		layout.addWidget(description)
+		
+		# Separator
+		separator = QFrame()
+		separator.setFrameShape(QFrame.Shape.HLine)
+		separator.setFrameShadow(QFrame.Shadow.Sunken)
+		layout.addWidget(separator)
+		
+		# Credits
+		credits = QLabel("Created by Luke Morrison")
+		credits.setStyleSheet("color: #888;")
+		layout.addWidget(credits)
+		
+		layout.addStretch()
+		
+		return widget
+	
+	def _browse_save_folder(self):
+		folder = QFileDialog.getExistingDirectory(
+			self, "Select Save Folder", self._save_dir or str(Path.home())
+		)
+		if folder:
+			self._save_dir = folder
+			self.save_folder_edit.setText(folder)
+			self._save_dir_changed = True
+	
+	def _browse_library_folder(self):
+		folder = QFileDialog.getExistingDirectory(
+			self, "Select Screenshot Folder", self._library_dir or str(Path.home())
+		)
+		if folder:
+			self._library_dir = folder
+			self.library_folder_edit.setText(folder)
+			self._library_dir_changed = True
+	
+	def get_save_folder(self):
+		"""Return the save folder path if changed, else None."""
+		return Path(self._save_dir) if self._save_dir_changed else None
+	
+	def get_library_folder(self):
+		"""Return the library folder path if changed, else None."""
+		return Path(self._library_dir) if self._library_dir_changed else None
+
+
 class MainWindow(QMainWindow):
 	def __init__(self):
 		super().__init__()
@@ -1372,9 +1581,8 @@ class MainWindow(QMainWindow):
 		self._status_bar = self.statusBar()
 		self._status_bar.showMessage("Cursor: x=0.0, y=0.0")
 
-		central_widget = QWidget()
-		self.setCentralWidget(central_widget)
-		main_layout = QHBoxLayout(central_widget)
+		self._splitter = QSplitter(Qt.Orientation.Horizontal)
+		self.setCentralWidget(self._splitter)
 
 		self.scene = QGraphicsScene()
 		self.scene.selectionChanged.connect(self.on_scene_selection_changed)
@@ -1393,8 +1601,18 @@ class MainWindow(QMainWindow):
 		self.layer_list.itemSelectionChanged.connect(self.on_layer_selection_changed)
 		right_layout.addWidget(self.layer_list)
 
-		main_layout.addWidget(self.view, 3)
-		main_layout.addWidget(right_widget, 1)
+		self.library_panel = ImageLibraryPanel(settings=self.settings, parent=self)
+		self.library_panel.assetActivated.connect(self._import_library_asset)
+		self.library_panel.exportRequested.connect(self._export_canvas_to_library)
+		self.library_panel.folderChanged.connect(self._on_library_folder_changed)
+
+		self._splitter.addWidget(self.library_panel)
+		self._splitter.addWidget(self.view)
+		self._splitter.addWidget(right_widget)
+		self._splitter.setStretchFactor(0, 0)
+		self._splitter.setStretchFactor(1, 3)
+		self._splitter.setStretchFactor(2, 1)
+		self._restore_splitter_sizes()
 
 		self.toolbar = QToolBar("Tools")
 		self.toolbar.setIconSize(QSizeF(48, 48).toSize())
@@ -1479,9 +1697,35 @@ class MainWindow(QMainWindow):
 
 		edit_menu = self.menuBar().addMenu("Edit")
 		edit_menu.addAction(delete_action)
-		change_save_dir_action = QAction("Change Save Folder...", self)
-		change_save_dir_action.triggered.connect(self.change_save_directory)
-		edit_menu.addAction(change_save_dir_action)
+		edit_menu.addSeparator()
+		preferences_action = QAction("Preferences...", self)
+		preferences_action.setShortcut(QKeySequence("Ctrl+,"))
+		preferences_action.triggered.connect(self.open_preferences)
+		edit_menu.addAction(preferences_action)
+
+	def open_preferences(self):
+		"""Open the Preferences dialog."""
+		current_library_dir = self.library_panel.current_root_path() if hasattr(self, 'library_panel') else None
+		dialog = PreferencesDialog(
+			self,
+			settings=self.settings,
+			current_save_dir=self.default_save_dir,
+			current_library_dir=current_library_dir
+		)
+		if dialog.exec() == QDialog.DialogCode.Accepted:
+			# Apply save folder change
+			new_save = dialog.get_save_folder()
+			if new_save:
+				self.default_save_dir = new_save
+				self._ensure_save_directory()
+				self.settings.setValue("default_save_dir", str(self.default_save_dir))
+				self._status_bar.showMessage(f"Save folder set to {self.default_save_dir}", 5000)
+			
+			# Apply library folder change
+			new_library = dialog.get_library_folder()
+			if new_library and hasattr(self, 'library_panel'):
+				self.library_panel.set_root_path(new_library, persist=True)
+				self._status_bar.showMessage(f"Screenshot folder set to {new_library}", 5000)
 
 	def open_images(self):
 		files, _ = QFileDialog.getOpenFileNames(self, "Open Images", "", "Images (*.png *.jpg *.svg)")
@@ -1657,53 +1901,29 @@ class MainWindow(QMainWindow):
 		self.scene.update()
 
 	def save_canvas(self):
-		self._ensure_save_directory()
-		selected_items = list(self.scene.selectedItems())
-		overlay_item = None
-		overlay_state = None
-		overlay_host = self.view.active_selection_host()
-		if overlay_host and overlay_host.hasSelectionOverlay():
-			overlay_item = overlay_host.selectionOverlay()
-			if overlay_item:
-				overlay_state = {
-					"visible": overlay_item.isVisible(),
-					"selected": overlay_item.isSelected(),
-				}
-				overlay_item.setSelected(False)
-				overlay_item.setVisible(False)
-		self.scene.clearSelection()
-		rect = self.scene.itemsBoundingRect()
-		if rect.isEmpty():
-			rect = QRectF(self.view.viewport().rect())
-		size = rect.size().toSize()
-		if size.isEmpty():
-			self._restore_selection_state(selected_items, overlay_item, overlay_state)
+		print(f"DEBUG save_canvas: default_save_dir = {self.default_save_dir}")
+		image = self._capture_scene_image()
+		if image is None:
+			print("DEBUG save_canvas: No image to save (scene empty)")
+			self._status_bar.showMessage("Nothing to save", 4000)
 			return
-		try:
-			image = QImage(size, QImage.Format.Format_ARGB32)
-			image.fill(Qt.GlobalColor.transparent)
-			painter = QPainter(image)
-			self.scene.render(painter, QRectF(image.rect()), rect)
-			painter.end()
-			base_name = datetime.date.today().strftime("%Y-%m-%d") + "_CanvasForge"
-			counter = 1
-			while True:
-				candidate = self.default_save_dir / f"{base_name}_{counter}.png"
-				if not candidate.exists():
-					break
-				counter += 1
-			image.save(str(candidate))
+		self._ensure_save_directory()
+		print(f"DEBUG save_canvas: Directory exists = {self.default_save_dir.exists()}")
+		base_name = datetime.date.today().strftime("%Y-%m-%d") + "_CanvasForge"
+		counter = 1
+		while True:
+			candidate = self.default_save_dir / f"{base_name}_{counter}.png"
+			if not candidate.exists():
+				break
+			counter += 1
+		print(f"DEBUG save_canvas: Attempting to save to {candidate}")
+		success = image.save(str(candidate))
+		print(f"DEBUG save_canvas: Save result = {success}")
+		if success:
 			self._status_bar.showMessage(f"Saved canvas to {candidate}", 5000)
-		finally:
-			self._restore_selection_state(selected_items, overlay_item, overlay_state)
-
-	def change_save_directory(self):
-		new_dir = QFileDialog.getExistingDirectory(self, "Select Save Folder", str(self.default_save_dir))
-		if new_dir:
-			self.default_save_dir = Path(new_dir)
-			self._ensure_save_directory()
-			self.settings.setValue("default_save_dir", str(self.default_save_dir))
-			self._status_bar.showMessage(f"Default save folder set to {self.default_save_dir}", 5000)
+		else:
+			self._status_bar.showMessage(f"ERROR: Failed to save to {candidate}", 5000)
+			print(f"ERROR save_canvas: image.save() returned False for {candidate}")
 
 	def _ensure_save_directory(self):
 		self.default_save_dir.mkdir(parents=True, exist_ok=True)
@@ -1734,6 +1954,83 @@ class MainWindow(QMainWindow):
 			self._status_bar.clearMessage()
 			return
 		self._status_bar.showMessage(f"Cursor: x={pos.x():.1f}, y={pos.y():.1f}")
+
+	def _restore_splitter_sizes(self):
+		default_sizes = [220, 760, 240]
+		sizes = self.settings.value("main_splitter_sizes", [])
+		if isinstance(sizes, list):
+			int_sizes = []
+			for value in sizes:
+				try:
+					int_sizes.append(int(value))
+				except (TypeError, ValueError):
+					continue
+			if len(int_sizes) == 3:
+				self._splitter.setSizes(int_sizes)
+				return
+		self._splitter.setSizes(default_sizes)
+
+	def _import_library_asset(self, file_path):
+		scene_pos = self.view.mapToScene(self.view.viewport().rect().center())
+		if not self.view._paste_file_path(file_path, scene_pos):
+			self.add_artifact(file_path)
+		self._status_bar.showMessage(f"Imported {Path(file_path).name} from library", 4000)
+
+	def _export_canvas_to_library(self):
+		if not hasattr(self, 'library_panel'):
+			return
+		target_dir = self.library_panel.current_root_path()
+		if not target_dir:
+			self._status_bar.showMessage("Set a library folder before exporting", 4000)
+			return
+		image = self._capture_scene_image()
+		if image is None:
+			self._status_bar.showMessage("Nothing to export", 4000)
+			return
+		target_dir.mkdir(parents=True, exist_ok=True)
+		file_name = f"canvas_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+		export_path = target_dir / file_name
+		image.save(str(export_path))
+		self._status_bar.showMessage(f"Exported canvas to {export_path}", 5000)
+		self.library_panel.refresh()
+
+	def _on_library_folder_changed(self, folder):
+		self._status_bar.showMessage(f"Library folder: {folder}", 3000)
+
+	def _capture_scene_image(self):
+		selected_items = list(self.scene.selectedItems())
+		overlay_item = None
+		overlay_state = None
+		overlay_host = self.view.active_selection_host()
+		if overlay_host and overlay_host.hasSelectionOverlay():
+			overlay_item = overlay_host.selectionOverlay()
+			if overlay_item:
+				overlay_state = {
+					"visible": overlay_item.isVisible(),
+					"selected": overlay_item.isSelected(),
+				}
+				overlay_item.setSelected(False)
+				overlay_item.setVisible(False)
+		self.scene.clearSelection()
+		rect = self.scene.itemsBoundingRect()
+		if rect.isEmpty():
+			rect = QRectF(self.view.viewport().rect())
+		size = rect.size().toSize()
+		if size.isEmpty():
+			self._restore_selection_state(selected_items, overlay_item, overlay_state)
+			return None
+		image = QImage(size, QImage.Format.Format_ARGB32)
+		image.fill(Qt.GlobalColor.transparent)
+		painter = QPainter(image)
+		self.scene.render(painter, QRectF(image.rect()), rect)
+		painter.end()
+		self._restore_selection_state(selected_items, overlay_item, overlay_state)
+		return image
+
+	def closeEvent(self, event):
+		if hasattr(self, '_splitter'):
+			self.settings.setValue("main_splitter_sizes", self._splitter.sizes())
+		super().closeEvent(event)
 
 
 if __name__ == "__main__":

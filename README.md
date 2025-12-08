@@ -10,6 +10,7 @@ CanvasForge is a PyQt6-powered canvas utility focused on quickly remixing screen
 - **Text tooling:** Double-click to edit text items with proper cursor management; escape exits edit mode cleanly.
 - **Flattening & saving:** Convert selected layers or the entire scene into new raster artifacts, then auto-save to a Pictures/CanvasForge folder (configurable in settings). Blue control handles are hidden before rendering so exports stay clean.
 - **Layer + artifact lists:** Side panels keep imported resources and active scene layers in sync, supporting Ctrl/Cmd multi-select for flattening or deletion.
+- **Image Library sidebar:** A docked thumbnail browser watches your OS screenshots folder (defaults to `~/Pictures/Screenshots`) with search, sorting, zoom, and drag/export controls so external references are always one click away.
 - **Dark Mode & Custom Icons:** The application features a sleek dark mode and uses external icon files in `assets/toolbar_icons/`. Users can customize the toolbar by replacing these images. The system will load `icon_name.png` first; if missing, it falls back to `icon_name.svg`. Filenames are stripped of resolution info (e.g. `toolbar_icon_pointer`).
 - **Desktop-ready branding:** A dedicated app icon in `assets/app_icons/canvasForge_app_icon.png` keeps the Pop!_OS launcher and task switcher on-brand. The installer script copies this icon system-wide so CanvasForge shows up under Audio & Video.
 
@@ -63,6 +64,8 @@ This legacy helper installs into `~/.local/share/canvasforge`, drops a `canvasfo
 ## Usage Notes
 
 - Use the toolbar or keyboard shortcuts (`S` for select) to switch tools. The selection marquee collaborates with the layer list so you can target multiple items quickly.
+- The **Image Library** panel on the left auto-scans `~/Pictures/Screenshots` (with fallbacks) for PNG/JPG/WebP/GIF/SVG files. Double-click or drag thumbnails onto the canvas, use the zoom slider for larger previews, and tap *Export Canvas* to flatten the scene back into the monitored folder.
+- Switch the watched folder any time via **Edit → Change Image Library Folder...**. CanvasForge stores the selection in `QSettings` so it persists between launches, and the combo box in the panel remembers common screenshot directories.
 - Paste content from the clipboard (Ctrl/Cmd+V). SVG markup from the clipboard remains editable; bitmap content becomes raster layers.
 - Right-click anywhere on an item to open the shared context menu for copy/delete and future actions.
 - Use *Flatten Selected* or *Flatten All* from the toolbar/menu to rasterize layers. The operations create a new raster artifact without destroying originals until you remove them.
