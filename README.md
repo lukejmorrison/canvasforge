@@ -59,7 +59,28 @@ The script wraps `flatpak-builder`, automatically installs the KDE 6.8 runtime/S
 bash scripts/install_canvasforge.sh
 ```
 
-This legacy helper installs into `~/.local/share/canvasforge`, drops a `canvasforge` launcher in `~/.local/bin`, copies the branded icon, and registers a `.desktop` entry in the Audio & Video category.
+This helper installs into `~/.local/share/canvasforge`, drops a `canvasforge` launcher in `~/.local/bin`, copies the branded icon, and registers a `.desktop` entry in the Audio & Video category.
+
+Useful installer modes:
+
+```bash
+# Standard install/update from GitHub
+bash scripts/install_canvasforge.sh
+
+# Full reinstall (recommended when recovering from broken .venv state)
+bash scripts/install_canvasforge.sh --clean
+
+# Install from your current local checkout
+bash scripts/install_canvasforge.sh --local
+
+# Full reinstall from your current local checkout
+bash scripts/install_canvasforge.sh --local --clean
+
+# Show installer options
+bash scripts/install_canvasforge.sh --help
+```
+
+The installer now auto-heals unhealthy virtual environments and retries Python dependency installs, which makes reinstalls more reliable on Arch/Omarchy systems.
 
 ## Usage Notes
 

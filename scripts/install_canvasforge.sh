@@ -14,27 +14,127 @@ ICON_SOURCE_REL="assets/app_icons/canvasForge_app_icon.png"
 ICON_TARGET_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
 ICON_TARGET="$ICON_TARGET_ROOT/canvasforge.png"
 
-command -v git >/dev/null 2>&1 || { echo "git is required but was not found" >&2; exit 1; }
-command -v python3 >/dev/null 2>&1 || { echo "python3 is required but was not found" >&2; exit 1; }
-if [[ "$(uname -s)" != "Linux" ]]; then
-    echo "This installer targets Linux (Pop!_OS) desktops." >&2
+USE_LOCAL=false
+CLEAN_INSTALL=false
+
+usage() {
+    cat <<EOF
+Usage: $0 [--local] [--clean] [--help]
+
+Options:
+  --local   Install from the local checkout instead of GitHub
+  --clean   Remove existing install directory before install
+  --help    Show this help message
+EOF
+}
+
+die() {
+    echo "Error: $1" >&2
     exit 1
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --local)
+            USE_LOCAL=true
+            ;;
+        --clean)
+            CLEAN_INSTALL=true
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            die "Unknown argument: $arg (use --help for options)"
+            ;;
+    esac
+done
+
+run_with_retry() {
+    local attempts="$1"
+    shift
+    local delay=2
+    local try=1
+    while true; do
+        if "$@"; then
+            return 0
+        fi
+        if (( try >= attempts )); then
+            return 1
+        fi
+        echo "Command failed (attempt $try/$attempts). Retrying in ${delay}s..." >&2
+        sleep "$delay"
+        try=$((try + 1))
+        delay=$((delay * 2))
+    done
+}
+
+command -v git >/dev/null 2>&1 || die "git is required but was not found"
+command -v python3 >/dev/null 2>&1 || die "python3 is required but was not found"
+command -v tar >/dev/null 2>&1 || die "tar is required but was not found"
+command -v install >/dev/null 2>&1 || die "install is required but was not found"
+if [[ "$(uname -s)" != "Linux" ]]; then
+    die "This installer targets Linux desktops."
 fi
 
 mkdir -p "$INSTALL_ROOT"
-if [[ -d "$APP_DIR/.git" ]]; then
-    git -C "$APP_DIR" fetch origin master >/dev/null 2>&1 || true
-    git -C "$APP_DIR" reset --hard origin/master
-else
+
+if [[ "$CLEAN_INSTALL" == true ]]; then
+    echo "Performing clean install..."
     rm -rf "$APP_DIR"
-    git clone --depth 1 "$REPO_URL" "$APP_DIR"
 fi
 
-python3 -m venv "$VENV_DIR"
-source "$VENV_DIR/bin/activate"
-pip install --upgrade pip
-pip install -r "$APP_DIR/requirements.txt"
-deactivate
+if [ "$USE_LOCAL" = true ]; then
+    echo "Installing from local source..."
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    
+    rm -rf "$APP_DIR"
+    mkdir -p "$APP_DIR"
+    
+    echo "Copying files..."
+    tar --exclude='.git' \
+        --exclude='.venv' \
+        --exclude='venv' \
+        --exclude='__pycache__' \
+        --exclude='.flatpak-builder' \
+        --exclude='flatpak-build' \
+        -cf - -C "$PROJECT_ROOT" . | tar -xf - -C "$APP_DIR"
+     
+else
+    if [[ -d "$APP_DIR/.git" ]]; then
+        git -C "$APP_DIR" fetch origin master >/dev/null 2>&1 || true
+        git -C "$APP_DIR" reset --hard origin/master
+    else
+        rm -rf "$APP_DIR"
+        git clone --depth 1 "$REPO_URL" "$APP_DIR"
+    fi
+fi
+
+RECREATE_VENV=false
+if [[ "$CLEAN_INSTALL" == true ]]; then
+    RECREATE_VENV=true
+fi
+
+if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+    RECREATE_VENV=true
+fi
+
+if [[ "$RECREATE_VENV" == true ]]; then
+    echo "Creating virtual environment..."
+    rm -rf "$VENV_DIR"
+    python3 -m venv "$VENV_DIR"
+fi
+
+if ! "$VENV_DIR/bin/python" -c 'import sys' >/dev/null 2>&1; then
+    echo "Virtual environment is unhealthy; rebuilding..."
+    rm -rf "$VENV_DIR"
+    python3 -m venv "$VENV_DIR"
+fi
+
+run_with_retry 3 "$VENV_DIR/bin/python" -m pip install --upgrade pip || die "Failed to upgrade pip"
+run_with_retry 3 "$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt" || die "Failed to install Python dependencies"
 
 mkdir -p "$BIN_DIR"
 cat > "$LAUNCHER_SCRIPT" <<EOF
