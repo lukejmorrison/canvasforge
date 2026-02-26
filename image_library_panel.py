@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from PyQt6.QtCore import (
     QFileInfo,
     QFileSystemWatcher,
     QModelIndex,
+    QObject,
+    QRect,
     QSortFilterProxyModel,
     QStandardPaths,
     Qt,
@@ -14,7 +16,7 @@ from PyQt6.QtCore import (
     QSize,
     pyqtSignal,
 )
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QKeySequence, QShortcut, QPixmap, QPainter, QColor, QFont, QPen, QImage
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -26,6 +28,9 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSlider,
     QSizePolicy,
+    QStyle,
+    QStyleOptionViewItem,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -44,6 +49,236 @@ ALLOWED_EXTENSIONS: Tuple[str, ...] = (
 )
 
 SCREENSHOT_SETTINGS_KEY = "screenshot_library_dir"
+
+# Thumbnail cache and delegate constants
+THUMBNAIL_SIZE = 48
+ROW_HEIGHT = 56
+DATE_FORMAT = "yyMMdd HHmmss"
+MAX_CACHE_SIZE = 500  # Max number of cached thumbnails
+
+
+class ThumbnailCache(QObject):
+    """Background thumbnail generator with in-memory caching."""
+    
+    thumbnailReady = pyqtSignal(str)  # Emitted when a thumbnail is ready (file path)
+    
+    def __init__(self, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self._cache: Dict[Tuple[str, int], QPixmap] = {}  # (path, mtime) -> pixmap
+        self._pending: Set[str] = set()  # Paths currently being generated
+        self._queue: List[str] = []  # Paths waiting to be generated
+        self._timer = QTimer(self)
+        self._timer.setInterval(10)  # Process queue every 10ms
+        self._timer.timeout.connect(self._process_queue)
+        self._placeholder: Optional[QPixmap] = None
+    
+    def get_thumbnail(self, file_path: str) -> Optional[QPixmap]:
+        """Get cached thumbnail or queue for background generation."""
+        path = Path(file_path)
+        if not path.exists():
+            return None
+        
+        try:
+            mtime = int(path.stat().st_mtime)
+        except OSError:
+            return None
+        
+        cache_key = (file_path, mtime)
+        
+        # Return cached thumbnail if available
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
+        # Queue for background generation if not already pending
+        if file_path not in self._pending and file_path not in self._queue:
+            self._queue.append(file_path)
+            if not self._timer.isActive():
+                self._timer.start()
+        
+        return self._get_placeholder()
+    
+    def _get_placeholder(self) -> QPixmap:
+        """Return a placeholder pixmap for loading thumbnails."""
+        if self._placeholder is None:
+            self._placeholder = QPixmap(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
+            self._placeholder.fill(QColor(60, 60, 60))
+            painter = QPainter(self._placeholder)
+            painter.setPen(QPen(QColor(100, 100, 100)))
+            painter.drawText(self._placeholder.rect(), Qt.AlignmentFlag.AlignCenter, "...")
+            painter.end()
+        return self._placeholder
+    
+    def _process_queue(self) -> None:
+        """Process one item from the thumbnail generation queue."""
+        if not self._queue:
+            self._timer.stop()
+            return
+        
+        file_path = self._queue.pop(0)
+        self._pending.add(file_path)
+        
+        try:
+            self._generate_thumbnail(file_path)
+        finally:
+            self._pending.discard(file_path)
+    
+    def _generate_thumbnail(self, file_path: str) -> None:
+        """Generate and cache a thumbnail for the given file."""
+        path = Path(file_path)
+        if not path.exists():
+            return
+        
+        try:
+            mtime = int(path.stat().st_mtime)
+        except OSError:
+            return
+        
+        cache_key = (file_path, mtime)
+        
+        # Skip if already cached (might have been added while in queue)
+        if cache_key in self._cache:
+            return
+        
+        # Load and scale the image
+        image = QImage(file_path)
+        if image.isNull():
+            return
+        
+        # Scale to thumbnail size maintaining aspect ratio
+        scaled = image.scaled(
+            THUMBNAIL_SIZE, THUMBNAIL_SIZE,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        
+        pixmap = QPixmap.fromImage(scaled)
+        
+        # Evict oldest entries if cache is too large
+        if len(self._cache) >= MAX_CACHE_SIZE:
+            # Remove first 10% of entries
+            keys_to_remove = list(self._cache.keys())[:MAX_CACHE_SIZE // 10]
+            for key in keys_to_remove:
+                del self._cache[key]
+        
+        self._cache[cache_key] = pixmap
+        self.thumbnailReady.emit(file_path)
+    
+    def clear(self) -> None:
+        """Clear the thumbnail cache."""
+        self._cache.clear()
+        self._queue.clear()
+        self._pending.clear()
+
+
+class ImageLibraryDelegate(QStyledItemDelegate):
+    """Custom delegate that displays thumbnails, filenames, and dates in a list row."""
+    
+    def __init__(self, thumbnail_cache: ThumbnailCache, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._cache = thumbnail_cache
+        self._font = QFont()
+        self._font.setPointSize(10)
+        self._date_font = QFont()
+        self._date_font.setPointSize(9)
+    
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        painter.save()
+        
+        # Get file info from model
+        model = index.model()
+        source_model = None
+        source_index = index
+        
+        # Handle proxy model
+        if hasattr(model, 'sourceModel'):
+            source_model = model.sourceModel()
+            if hasattr(model, 'mapToSource'):
+                source_index = model.mapToSource(index)
+        else:
+            source_model = model
+        
+        if not isinstance(source_model, QFileSystemModel):
+            super().paint(painter, option, index)
+            painter.restore()
+            return
+        
+        file_info = source_model.fileInfo(source_index)
+        file_path = file_info.absoluteFilePath()
+        file_name = file_info.fileName()
+        modified = file_info.lastModified()
+        
+        # Draw selection background
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, QColor(42, 130, 218))
+        elif option.state & QStyle.StateFlag.State_MouseOver:
+            painter.fillRect(option.rect, QColor(60, 60, 60))
+        
+        rect = option.rect
+        padding = 4
+        
+        # Draw thumbnail
+        thumb_rect = QRect(
+            rect.left() + padding,
+            rect.top() + (rect.height() - THUMBNAIL_SIZE) // 2,
+            THUMBNAIL_SIZE,
+            THUMBNAIL_SIZE
+        )
+        
+        thumbnail = self._cache.get_thumbnail(file_path)
+        if thumbnail and not thumbnail.isNull():
+            # Center the thumbnail in the thumb_rect
+            thumb_x = thumb_rect.left() + (thumb_rect.width() - thumbnail.width()) // 2
+            thumb_y = thumb_rect.top() + (thumb_rect.height() - thumbnail.height()) // 2
+            painter.drawPixmap(thumb_x, thumb_y, thumbnail)
+        else:
+            # Draw placeholder
+            painter.fillRect(thumb_rect, QColor(50, 50, 50))
+        
+        # Calculate text positions - filename first, then date flows after
+        text_left = thumb_rect.right() + padding * 2
+        date_str = modified.toString(DATE_FORMAT)
+        
+        # Measure filename width to position date after it
+        painter.setFont(self._font)
+        fm = painter.fontMetrics()
+        filename_width = fm.horizontalAdvance(file_name)
+        
+        # Draw filename (left-justified, always visible)
+        text_rect = QRect(
+            text_left,
+            rect.top() + padding,
+            filename_width + padding,
+            rect.height() - padding * 2
+        )
+        
+        painter.setPen(QColor(220, 220, 220))
+        painter.drawText(
+            text_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            file_name
+        )
+        
+        # Draw date after filename (may be clipped if panel is narrow)
+        date_left = text_left + filename_width + padding * 3
+        date_rect = QRect(
+            date_left,
+            rect.top() + padding,
+            120,
+            rect.height() - padding * 2
+        )
+        
+        painter.setFont(self._date_font)
+        painter.setPen(QColor(150, 150, 150))
+        painter.drawText(
+            date_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            date_str
+        )
+        
+        painter.restore()
+    
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
+        return QSize(option.rect.width(), ROW_HEIGHT)
 
 
 class LibrarySortFilterProxy(QSortFilterProxyModel):
@@ -162,7 +397,7 @@ class ImageLibraryProperties(QWidget):
         self._name_label.setText(f"Name: {info.fileName()}")
         size_kb = max(1, info.size() // 1024)
         self._size_label.setText(f"Size: {size_kb} KB")
-        self._modified_label.setText(f"Modified: {info.lastModified().toString('yyyy-MM-dd HH:mm')}")
+        self._modified_label.setText(f"Modified: {info.lastModified().toString(DATE_FORMAT)}")
 
 
 class ImageLibraryPanel(QWidget):
@@ -189,12 +424,20 @@ class ImageLibraryPanel(QWidget):
         self._refresh_timer.setInterval(300)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.timeout.connect(self.refresh)
+        
+        # Thumbnail cache for background generation
+        self._thumbnail_cache = ThumbnailCache(self)
+        self._thumbnail_cache.thumbnailReady.connect(self._on_thumbnail_ready)
 
         self._build_ui()
         self._install_shortcuts()
         self._connect_signals()
         initial_root = detect_screenshot_folder(settings)
         self.set_root_path(initial_root, persist=False)
+    
+    def _on_thumbnail_ready(self, file_path: str) -> None:
+        """Trigger view update when a thumbnail finishes loading."""
+        self.list_view.viewport().update()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -215,15 +458,18 @@ class ImageLibraryPanel(QWidget):
         header.addWidget(self.refresh_button)
         layout.addLayout(header)
 
+        # Custom delegate for thumbnails and date display
+        self._delegate = ImageLibraryDelegate(self._thumbnail_cache, self)
+        
         self.list_view = QListView()
-        self.list_view.setViewMode(QListView.ViewMode.IconMode)
+        self.list_view.setViewMode(QListView.ViewMode.ListMode)
         self.list_view.setResizeMode(QListView.ResizeMode.Adjust)
         self.list_view.setMovement(QListView.Movement.Static)
-        self.list_view.setSpacing(8)
+        self.list_view.setSpacing(2)
         self.list_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_view.setUniformItemSizes(True)
-        self.list_view.setWrapping(True)
-        self.list_view.setIconSize(QSize(120, 120))
+        self.list_view.setWrapping(False)
+        self.list_view.setItemDelegate(self._delegate)
         self.list_view.setDragEnabled(True)
         self.list_view.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         self.list_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -243,11 +489,7 @@ class ImageLibraryPanel(QWidget):
         self.sort_combo.addItem("Size ↓", ("size", Qt.SortOrder.DescendingOrder))
         sort_row.addWidget(self.sort_combo)
 
-        sort_row.addWidget(QLabel("Zoom"))
-        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
-        self.zoom_slider.setRange(60, 200)
-        self.zoom_slider.setValue(120)
-        sort_row.addWidget(self.zoom_slider)
+        # Zoom slider removed - not applicable in list mode
         footer.addLayout(sort_row)
 
         self.properties_widget = ImageLibraryProperties()
@@ -270,7 +512,6 @@ class ImageLibraryPanel(QWidget):
         self.search_field.textChanged.connect(self._proxy.set_search_term)
         self.refresh_button.clicked.connect(self.refresh)
         self.sort_combo.currentIndexChanged.connect(self._handle_sort_change)
-        self.zoom_slider.valueChanged.connect(self._handle_zoom_change)
         self.export_button.clicked.connect(self.exportRequested.emit)
         self.list_view.doubleClicked.connect(self._handle_activation)
         selection_model = self.list_view.selectionModel()
@@ -322,11 +563,6 @@ class ImageLibraryPanel(QWidget):
         self._proxy.set_sort_mode(mode, order)
         self._proxy.invalidate()
 
-    def _handle_zoom_change(self, value: int) -> None:
-        size = QSize(value, value)
-        self.list_view.setIconSize(size)
-        self.list_view.update()
-
     def _handle_folder_selection(self, index: int) -> None:
         data = self.folder_combo.itemData(index)
         if data == "__browse__":
@@ -373,6 +609,8 @@ class ImageLibraryPanel(QWidget):
         self._model.setRootPath("")
         root_index = self._model.setRootPath(current)
         self.list_view.setRootIndex(self._proxy.mapFromSource(root_index))
+        # Re-apply current sort settings after refresh
+        self._proxy.invalidate()
         self._handle_selection_changed()
 
     def _schedule_refresh(self, _path: str) -> None:

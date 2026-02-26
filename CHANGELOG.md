@@ -1,6 +1,94 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.5.0] - 2025-12-10
+
+### Added
+- **Appearance Settings:** New "Appearance" tab in Preferences with Icon Theme support
+  - Users can select different icon themes stored in `assets/toolbar_icons/`
+  - Dynamic discovery of new themes folder
+- **Robust Icon Loading:** Enhanced icon system that prioritizes SVG files and handles missing assets gracefully
+  - Automatic fallback to PNG if SVG missing
+  - Automatic fallback to global assets if plugin asset missing
+  - Visual placeholder generation for completely missing icons (dashed red box with text)
+- **Plugin System Polish:**
+  - Improved `plugin_manager.py` to auto-resolve icons using the global resource system
+  - Validates plugin icons against both .svg and .png extensions
+
+### Changed
+- **Crop Tool:** Updated to use the new robust icon loading system, fixing missing icon issues
+- **Preferences:** Reorganized tabs to include Appearance settings
+
+
+## [1.4.0] - 2025-12-09
+
+### Added
+- **Plugin System:** Full modular plugin architecture for extending CanvasForge
+  - `PluginManager` class for discovering, loading, and managing plugins
+  - `PluginAPI` class exposing controlled access to scene, items, and UI
+  - Plugin manifest format (`manifest.json`) with permissions, hooks, and dependencies
+  - Plugins tab in Preferences for managing installed plugins
+  - "Open Plugins Folder" button for easy access to user plugins directory
+  - Configurable editor path for plugin development (defaults to VS Code)
+  - Plugin reload functionality without restarting app
+  
+- **Undo/Redo System:** Comprehensive undo/redo that works across the entire app
+  - `UndoManager` class with undo/redo stacks and action groups
+  - `UndoableAction` base class for all reversible operations
+  - Built-in action types: `ImageEditAction`, `MoveItemAction`, `TransformItemAction`, etc.
+  - Edit > Undo (Ctrl+Z) and Edit > Redo (Ctrl+Shift+Z) menu items
+  - Dynamic menu text showing action description (e.g., "Undo Crop Image")
+  
+- **Crop Tool Plugin:** First bundled plugin demonstrating the plugin system
+  - Crop any raster image on the canvas
+  - Visual crop overlay with adjustable region
+  - Full undo/redo support
+  - Keyboard shortcuts: C to activate, Enter to apply, Escape to cancel
+  - Located in `plugins/crop_tool/`
+
+### Changed
+- Version bumped to 1.4.0
+
+## [1.3.0] - 2025-12-09
+
+### Added
+- **Window Position Persistence:** App now remembers window position, size, and monitor between sessions
+  - New "Window" tab in Preferences with "Remember window position and size" option
+  - Window state saved automatically when closing
+  - Respects system default (mouse cursor position) when disabled
+- **File > Exit menu item:** Added Exit option with Ctrl+Q shortcut
+- **Canvas Import Settings:** New preferences in Edit > Preferences > Canvas tab:
+  - "After adding image" behavior: Keep current view, Pan to show new image, Zoom to fit all items, or Zoom to fit new item
+  - "Scale down images larger than viewport" option to auto-scale large imports
+- **Fit view methods:** Added `fit_all_items()`, `fit_item()`, and `pan_to_item()` methods to CanvasView
+
+### Fixed
+- **Critical crash fix:** Fixed RuntimeError "wrapped C/C++ object deleted" when deleting items
+  - Added `sip.isdeleted()` checks before accessing graphics items
+  - Block signals during item removal to prevent stale reference access
+- **Image Library selection:** Adding images from library now correctly selects only the new item
+- **Image Library refresh/sort sync:** Refresh button re-applies current sort settings
+- **Date display positioning:** Date flows after filename, ensuring filename always visible
+
+## [1.2.0] - 2025-12-09
+
+### Added
+- **Image Library Display Update:** Redesigned file listing with:
+  - Small 48x48 image thumbnails showing actual previews (not file icons)
+  - Left-justified filename column for better readability
+  - YYMMDD HHMMSS date/time format visible inline for sort verification
+  - Background thumbnail generation with caching for smooth performance
+- **ThumbnailCache class:** Async thumbnail generator that queues image loading to prevent UI blocking
+- **ImageLibraryDelegate class:** Custom `QStyledItemDelegate` for the new row-based display
+
+### Changed
+- **Image Library view mode:** Switched from IconMode (grid) to ListMode (rows) for columnar layout
+- **Removed zoom slider:** Zoom control removed since thumbnails are now fixed-size in list view
+
+### Technical
+- Thumbnail cache handles 500+ images with LRU eviction
+- Background generation uses `QTimer.singleShot` queue pattern
+- Date format constant `DATE_FORMAT = "yyMMdd HHmmss"` shared across delegate and properties
 
 ## [1.1.0] - 2025-12-08
 

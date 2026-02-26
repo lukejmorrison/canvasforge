@@ -1,0 +1,1 @@
+/home/luke/dev/template_skills/omarchy-agents.SKILL.md
