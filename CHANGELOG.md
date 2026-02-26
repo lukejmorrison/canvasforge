@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - **Plugin System Polish:**
   - Improved `plugin_manager.py` to auto-resolve icons using the global resource system
   - Validates plugin icons against both .svg and .png extensions
+- **Platform Support:** Installer verified on Pop!_OS and Omarchy Arch Linux, with improved retry logic for Arch rolling releases
 
 ### Changed
 - **Crop Tool:** Updated to use the new robust icon loading system, fixing missing icon issues

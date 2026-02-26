@@ -1,5 +1,12 @@
 # CanvasForge
 
+**Version 1.5.0 now available!**
+- 🎨 New cartoony icon theme with consistent 48×48 buttons and text alignment
+- 🧩 Fully modular plugin system with live reload, bundled Crop Tool example
+- 🔄 Comprehensive undo/redo infrastructure across the entire application
+- 🎭 Appearance tab lets you pick icon themes from `assets/toolbar_icons/`
+- 🔧 Robust icon loader with SVG/PNG fallbacks and missing‑icon placeholders
+
 CanvasForge is a PyQt6-powered canvas utility focused on quickly remixing screenshots, UI snippets, and vector assets. It combines clipboard-aware importing, precise selection overlays, and flatten/save workflows so you can compose documentation-ready visuals without leaving the desktop.
 
 ## Highlights
@@ -42,7 +49,11 @@ CanvasForge is a PyQt6-powered canvas utility focused on quickly remixing screen
    python main.py
    ```
 
-### Pop!_OS desktop installs
+### Pop!_OS & Omarchy Arch installs
+
+Installation has been verified on both **Pop!_OS** (Flatpak or local virtualenv) and **Omarchy Arch Linux**. The helper script tolerates broken `.venv` states and retries package installs, which makes reinstalls more reliable on rolling‑release systems like Arch.
+
+#### Flatpak (recommended)
 
 #### Flatpak (recommended)
 
