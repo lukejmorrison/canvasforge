@@ -8,8 +8,9 @@ Usage: scripts/build_release_archive.sh <version>
 Example:
   scripts/build_release_archive.sh 0.6.0-beta.1
 
-Builds dist/canvasforge-<version>.tar.gz from the current git HEAD,
-respecting .gitattributes export-ignore rules.
+Builds dist/canvasforge-<version>.tar.gz from tracked files with
+deterministic tar/gzip metadata. AUR-only metadata is intentionally
+excluded so checksum bumps do not change the release archive.
 EOF
 }
 
@@ -34,9 +35,27 @@ dist_dir="$repo_root/dist"
 archive="$dist_dir/canvasforge-${version}.tar.gz"
 
 mkdir -p "$dist_dir"
-git -C "$repo_root" archive \
-  --format=tar \
-  --prefix="canvasforge-${version}/" \
-  'HEAD^{tree}' | gzip -n > "$archive"
+git -C "$repo_root" ls-files -z -- \
+  . \
+  ':(exclude).gitattributes' \
+  ':(exclude).gitignore' \
+  ':(exclude).github/**' \
+  ':(exclude)dist/**' \
+  ':(exclude)packaging/aur/**' \
+  ':(exclude)pasted_logs/**' \
+  ':(exclude)screenshots/**' \
+  ':(exclude)wizwam-code-review/**' |
+  tar \
+    --directory="$repo_root" \
+    --null \
+    --files-from=- \
+    --format=posix \
+    --mtime='UTC 2026-01-01' \
+    --owner=0 \
+    --group=0 \
+    --numeric-owner \
+    --transform="s,^,canvasforge-${version}/," \
+    -cf - |
+  gzip -n > "$archive"
 
 echo "$archive"
