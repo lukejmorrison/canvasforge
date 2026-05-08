@@ -11,6 +11,6 @@ pkgbase = canvasforge-beta
 	conflicts = canvasforge
 	options = !debug
 	source = canvasforge-0.6.0-beta.1.tar.gz::https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.1/canvasforge-0.6.0-beta.1.tar.gz
-	sha256sums = TO_BE_FILLED_BY_scripts/update_aur_beta_pkgbuild.sh
+	sha256sums = 3257934fef131850f2ec6e45a5060895d12368531f4d78e1a2a2c85ee6acc38e
 
 pkgname = canvasforge-beta
