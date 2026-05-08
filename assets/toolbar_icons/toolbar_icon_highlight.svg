@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Highlighted background sweep -->
+  <rect x="6" y="22" width="52" height="20" fill="#fff176" opacity="0.85"/>
+  <!-- Marker tip -->
+  <path d="M44 12 L56 24 L36 44 L24 32 Z"
+        fill="#ffd54f" stroke="#b8860b" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M24 32 L36 44 L30 50 L18 38 Z"
+        fill="#8b6914" stroke="#5c4308" stroke-width="2" stroke-linejoin="round"/>
+  <line x1="14" y1="46" x2="22" y2="54" stroke="#3a3a3a" stroke-width="3" stroke-linecap="round"/>
+</svg>

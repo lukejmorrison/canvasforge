@@ -52,9 +52,20 @@ SCREENSHOT_SETTINGS_KEY = "screenshot_library_dir"
 
 # Thumbnail cache and delegate constants
 THUMBNAIL_SIZE = 48
-ROW_HEIGHT = 56
+ROW_HEIGHT = 74
 DATE_FORMAT = "yyMMdd HHmmss"
+LIST_DATE_FORMAT = "yyyy-MM-dd HH:mm"
 MAX_CACHE_SIZE = 500  # Max number of cached thumbnails
+
+
+def format_file_size(size_bytes: int) -> str:
+    """Return a compact human-readable file size."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    size_kb = size_bytes / 1024
+    if size_kb < 1024:
+        return f"{size_kb:.0f} KB"
+    return f"{size_kb / 1024:.1f} MB"
 
 
 class ThumbnailCache(QObject):
@@ -171,15 +182,15 @@ class ThumbnailCache(QObject):
 
 
 class ImageLibraryDelegate(QStyledItemDelegate):
-    """Custom delegate that displays thumbnails, filenames, and dates in a list row."""
+    """Custom delegate that displays thumbnails, filenames, and metadata in a list row."""
     
     def __init__(self, thumbnail_cache: ThumbnailCache, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._cache = thumbnail_cache
         self._font = QFont()
         self._font.setPointSize(10)
-        self._date_font = QFont()
-        self._date_font.setPointSize(9)
+        self._meta_font = QFont()
+        self._meta_font.setPointSize(8)
     
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         painter.save()
@@ -206,15 +217,17 @@ class ImageLibraryDelegate(QStyledItemDelegate):
         file_path = file_info.absoluteFilePath()
         file_name = file_info.fileName()
         modified = file_info.lastModified()
-        
-        # Draw selection background
-        if option.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(option.rect, QColor(42, 130, 218))
-        elif option.state & QStyle.StateFlag.State_MouseOver:
-            painter.fillRect(option.rect, QColor(60, 60, 60))
+        suffix = file_info.suffix().upper() or "FILE"
         
         rect = option.rect
-        padding = 4
+        padding = 6
+
+        # Draw row background with a bit more visual separation than the raw list view.
+        row_rect = rect.adjusted(1, 1, -1, -1)
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(row_rect, QColor(42, 130, 218))
+        elif option.state & QStyle.StateFlag.State_MouseOver:
+            painter.fillRect(row_rect, QColor(48, 48, 48))
         
         # Draw thumbnail
         thumb_rect = QRect(
@@ -234,46 +247,68 @@ class ImageLibraryDelegate(QStyledItemDelegate):
             # Draw placeholder
             painter.fillRect(thumb_rect, QColor(50, 50, 50))
         
-        # Calculate text positions - filename first, then date flows after
+        # Calculate text positions. Metadata lives on its own line so it remains visible
+        # when the library panel is narrowed.
         text_left = thumb_rect.right() + padding * 2
-        date_str = modified.toString(DATE_FORMAT)
-        
-        # Measure filename width to position date after it
+        text_right = rect.right() - padding
+        available_width = max(24, text_right - text_left)
+        date_str = modified.toString(LIST_DATE_FORMAT)
+        size_str = format_file_size(file_info.size())
+        meta_parts = [date_str, size_str, suffix]
+        meta_str = " | ".join(meta_parts)
+
+        # Draw filename with middle elision so extensions remain visible.
         painter.setFont(self._font)
         fm = painter.fontMetrics()
-        filename_width = fm.horizontalAdvance(file_name)
-        
-        # Draw filename (left-justified, always visible)
-        text_rect = QRect(
+        title_rect = QRect(
             text_left,
-            rect.top() + padding,
-            filename_width + padding,
-            rect.height() - padding * 2
+            rect.top() + 8,
+            available_width,
+            fm.height() + 2,
         )
         
         painter.setPen(QColor(220, 220, 220))
         painter.drawText(
-            text_rect,
+            title_rect,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            file_name
+            fm.elidedText(file_name, Qt.TextElideMode.ElideMiddle, available_width)
         )
         
-        # Draw date after filename (may be clipped if panel is narrow)
-        date_left = text_left + filename_width + padding * 3
-        date_rect = QRect(
-            date_left,
-            rect.top() + padding,
-            120,
-            rect.height() - padding * 2
+        painter.setFont(self._meta_font)
+        meta_fm = painter.fontMetrics()
+        meta_top = title_rect.bottom() + 4
+        meta_rect = QRect(
+            text_left,
+            meta_top,
+            available_width,
+            meta_fm.height() + 2
         )
-        
-        painter.setFont(self._date_font)
-        painter.setPen(QColor(150, 150, 150))
-        painter.drawText(
-            date_rect,
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            date_str
-        )
+
+        painter.setPen(QColor(178, 184, 192))
+        if meta_fm.horizontalAdvance(meta_str) <= available_width:
+            painter.drawText(
+                meta_rect,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                meta_str
+            )
+        else:
+            painter.drawText(
+                meta_rect,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                date_str
+            )
+            secondary = f"{size_str} | {suffix}"
+            secondary_rect = QRect(
+                text_left,
+                meta_rect.bottom() + 2,
+                available_width,
+                meta_fm.height() + 2
+            )
+            painter.drawText(
+                secondary_rect,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                meta_fm.elidedText(secondary, Qt.TextElideMode.ElideRight, available_width)
+            )
         
         painter.restore()
     
@@ -297,13 +332,16 @@ class LibrarySortFilterProxy(QSortFilterProxyModel):
             return
         self._search_term = lowered
         self.invalidateFilter()
+        self.apply_sort()
 
     def set_sort_mode(self, mode: str, order: Qt.SortOrder) -> None:
-        if self._sort_mode == mode and self._sort_order == order:
-            return
         self._sort_mode = mode
         self._sort_order = order
+        self.apply_sort()
+
+    def apply_sort(self) -> None:
         self.invalidate()
+        self.sort(0, self._sort_order)
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:  # type: ignore[override]
         model = self.sourceModel()
@@ -321,10 +359,8 @@ class LibrarySortFilterProxy(QSortFilterProxyModel):
             left_val = left_info.lastModified().toSecsSinceEpoch()
             right_val = right_info.lastModified().toSecsSinceEpoch()
         if left_val == right_val:
-            return False
-        if self._sort_order == Qt.SortOrder.AscendingOrder:
-            return left_val < right_val
-        return left_val > right_val
+            return left_info.absoluteFilePath().lower() < right_info.absoluteFilePath().lower()
+        return left_val < right_val
 
     def filterAcceptsRow(  # type: ignore[override]
         self, source_row: int, source_parent: QModelIndex
@@ -385,6 +421,9 @@ class ImageLibraryProperties(QWidget):
         self._modified_label = QLabel("Modified: --")
         for widget in (self._name_label, self._size_label, self._modified_label):
             widget.setStyleSheet("color: #ddd;")
+            widget.setWordWrap(True)
+            widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
             layout.addWidget(widget)
 
     def update_metadata(self, file_path: Optional[Path]) -> None:
@@ -395,8 +434,8 @@ class ImageLibraryProperties(QWidget):
             return
         info = QFileInfo(str(file_path))
         self._name_label.setText(f"Name: {info.fileName()}")
-        size_kb = max(1, info.size() // 1024)
-        self._size_label.setText(f"Size: {size_kb} KB")
+        self._name_label.setToolTip(info.fileName())
+        self._size_label.setText(f"Size: {format_file_size(info.size())}")
         self._modified_label.setText(f"Modified: {info.lastModified().toString(DATE_FORMAT)}")
 
 
@@ -418,6 +457,8 @@ class ImageLibraryPanel(QWidget):
         self._model.setFilter(QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
         self._proxy = LibrarySortFilterProxy(self)
         self._proxy.setSourceModel(self._model)
+        self._proxy.apply_sort()
+        self._model.directoryLoaded.connect(lambda _path: self._apply_sort_and_root())
         self._watcher = QFileSystemWatcher(self)
         self._watcher.directoryChanged.connect(self._schedule_refresh)
         self._refresh_timer = QTimer(self)
@@ -469,6 +510,7 @@ class ImageLibraryPanel(QWidget):
         self.list_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_view.setUniformItemSizes(True)
         self.list_view.setWrapping(False)
+        self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list_view.setItemDelegate(self._delegate)
         self.list_view.setDragEnabled(True)
         self.list_view.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
@@ -561,7 +603,6 @@ class ImageLibraryPanel(QWidget):
             return
         mode, order = data
         self._proxy.set_sort_mode(mode, order)
-        self._proxy.invalidate()
 
     def _handle_folder_selection(self, index: int) -> None:
         data = self.folder_combo.itemData(index)
@@ -594,7 +635,7 @@ class ImageLibraryPanel(QWidget):
             self._watcher.removePaths(directories)
         self._watcher.addPath(str(self._current_root))
         root_index = self._model.setRootPath(str(self._current_root))
-        self.list_view.setRootIndex(self._proxy.mapFromSource(root_index))
+        self._apply_sort_and_root(root_index)
         self.folderChanged.emit(str(self._current_root))
         if persist and self.settings is not None and hasattr(self.settings, "setValue"):
             self.settings.setValue(SCREENSHOT_SETTINGS_KEY, str(self._current_root))
@@ -608,10 +649,16 @@ class ImageLibraryPanel(QWidget):
         current = str(self._current_root)
         self._model.setRootPath("")
         root_index = self._model.setRootPath(current)
-        self.list_view.setRootIndex(self._proxy.mapFromSource(root_index))
-        # Re-apply current sort settings after refresh
-        self._proxy.invalidate()
+        self._apply_sort_and_root(root_index)
         self._handle_selection_changed()
+
+    def _apply_sort_and_root(self, root_index: Optional[QModelIndex] = None) -> None:
+        """Re-sort and keep the view anchored to the selected library folder."""
+        if not self._current_root:
+            return
+        source_root = root_index if root_index is not None else self._model.index(str(self._current_root))
+        self._proxy.apply_sort()
+        self.list_view.setRootIndex(self._proxy.mapFromSource(source_root))
 
     def _schedule_refresh(self, _path: str) -> None:
         self._refresh_timer.start()

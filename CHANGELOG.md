@@ -1,6 +1,63 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [2026-05-08 06:15] Clipboard canvas paste and toolbar fit
+
+### Added
+- **Canvas-centered clipboard paste:** File > Paste / Ctrl+V now pastes clipboard images, SVGs, file URLs, and text onto the visible canvas instead of only adding image data to the repository. New pasted items expand the canvas bounds when needed.
+- **Distinct Send to Agent icon:** Added a dedicated Send to Agent toolbar icon so it no longer shares the Callout visual language.
+
+### Fixed
+- **Toolbar high-scale fit:** Toolbar auto-fit now targets a single row and can shrink to smaller icon-only buttons when larger OS font or display scaling would otherwise wrap tools onto a second line.
+- **Toolbar hover labels:** Toolbar icons now keep direct tooltip/accessible text on the actual icon buttons, so descriptions still appear when labels are hidden in icon-only auto-fit mode.
+- **Callout toolbar identity:** Refreshed the Callout plugin icon so it reads as a template/callout action rather than a duplicate of Send to Agent.
+
+## [2026-05-01 07:34] Canvas size presets and info tag
+
+### Added
+- **Alt-resize canvas presets:** Holding Alt while dragging a canvas edge or corner now snaps the workspace to common social, video, web, X.com, and connected-monitor sizes. The live resize readout names the snapped preset.
+- **Canvas info tag:** A small tag below the canvas now shows resolution, aspect ratio, PNG image type, and transparency status.
+
+## [2026-05-01 00:36] Smooth animated wheel zoom
+
+### Added
+- **Smooth Photoshop-style zoom:** Wheel zoom now uses cursor anchoring, gentler multiplicative scaling, and optional 60 FPS animation with configurable sensitivity so fast wheel flicks glide instead of jumping.
+
+## [2026-05-01 00:28] Photoshop-style wheel zoom preference
+
+### Added
+- **Zoom with Scroll Wheel preference:** Canvas preferences now include a Photoshop-style wheel behavior toggle. When enabled, wheel zooms at the cursor; when disabled, wheel pans/scrolls vertically and Alt+wheel zooms at the cursor.
+
+## [2026-05-01 00:24] View menu controls
+
+### Added
+- **View menu:** Added zoom in/out, zoom to fit, shrink-to-fit, actual size, pixel grid, background color choices, sidebar visibility, details focus, library focus, and recent-captures focus actions.
+
+## [2026-05-01 00:15] Modifier-constrained resize handles
+
+### Added
+- **Resize handle modifiers:** Canvas, cutout, blur/highlight, and generic item handles now use the standard Shift/Alt/Ctrl resize constraints: default proportional scaling, Shift/Ctrl independent axes, Alt center-based scaling, Ctrl+Shift shear-style transforms where supported, and Ctrl+Alt+Shift perspective-style transforms where supported.
+
+## [2026-05-01 00:00] Canvas resize readout
+
+### Added
+- **Live canvas size readout:** Dragging a canvas edge or corner now shows the current canvas size plus signed resize deltas; corner drags report both width and height changes.
+
+## [2026-04-30 19:53] Selection save + agent handoff toolbar
+
+### Added
+- **Selected-layer export:** Toolbar disk action saves only the selected canvas items to the configured CanvasForge save folder.
+- **Agent handoff:** Toolbar Send to Agent action bundles the selected image plus `annotations.json` and sends it through a configurable command or HTTP endpoint for Codex, Claude, OpenClaw, or Wizwam Agent Platform workflows.
+- **VS Code Codex handoff:** Added a target that opens the selected-image bundle in VS Code and copies a ready `codex_prompt.md` prompt to the clipboard.
+- **Select All:** Edit > Select All Canvas Items and Ctrl+A select every active layer.
+- **Cutout tool:** The old raster-region selection workflow remains available as a separate Cutout toolbar action.
+- **Drag-and-drop toolbar editing:** Preferences > Toolbar rows can now be dragged to reorder toolbar buttons, with Move Up/Down kept as fallback controls.
+
+### Fixed
+- **Select tool behavior:** The toolbar Select button now activates object selection/marquee selection, with Ctrl/Cmd-click toggling individual items.
+- **Toolbar reorder crash:** Fixed the missing live reorder hook that crashed Preferences when moving toolbar items.
+
 ## [1.5.0] - 2025-12-10
 
 ### Added

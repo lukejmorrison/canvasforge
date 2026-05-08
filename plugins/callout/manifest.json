@@ -1,0 +1,35 @@
+{
+    "id": "callout",
+    "name": "Callout",
+    "version": "1.0.0",
+    "description": "Load and manage SVG callout templates from your user Templates folder.",
+    "author": "CanvasForge",
+    "license": "MIT",
+    "entry_point": "plugin.py",
+    "min_canvasforge_version": "1.5.0",
+    "permissions": [
+        "scene.read",
+        "scene.write",
+        "toolbar.register",
+        "menu.register"
+    ],
+    "pip_dependencies": [],
+    "toolbar_items": [
+        {
+            "text": "Callout",
+            "callback": "load_callout_templates",
+            "icon": "icon.svg"
+        }
+    ],
+    "menu_items": [
+        {
+            "menu": "Plugins",
+            "text": "Load Callout Templates",
+            "callback": "load_callout_templates"
+        }
+    ],
+    "hooks": {
+        "on_load": "on_load",
+        "on_unload": "on_unload"
+    }
+}

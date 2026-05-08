@@ -51,7 +51,8 @@ We treat documentation as a first-class citizen.
 
 ## 3. Deployment / Packaging
 -   **Flatpak**: `bash scripts/build_flatpak.sh`
--   **Local**: `bash scripts/install_canvasforge.sh`
+-   **Local**: `bash scripts/install_canvasforge.sh --local`
+-   **Feature Install Verification**: Any time a new feature is added, reinstall the app from the local checkout with `bash scripts/install_canvasforge.sh --local` before final verification. This intentionally exercises the install process and ensures the launcher-installed copy matches the repo changes.
 
 # Integration Points
 -   **Plugins**: `/plugins/` via `plugin_manager.py`.

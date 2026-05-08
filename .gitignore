@@ -3,6 +3,7 @@ screenshots/
 pasted_logs/
 venv/
 .venv/
+.vscode/
 __pycache__/
 output.log
 flatpak/vendor/
