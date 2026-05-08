@@ -35,9 +35,8 @@ archive="$dist_dir/canvasforge-${version}.tar.gz"
 
 mkdir -p "$dist_dir"
 git -C "$repo_root" archive \
-  --format=tar.gz \
+  --format=tar \
   --prefix="canvasforge-${version}/" \
-  -o "$archive" \
-  'HEAD^{tree}'
+  'HEAD^{tree}' | gzip -n > "$archive"
 
 echo "$archive"
