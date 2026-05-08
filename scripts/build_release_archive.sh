@@ -38,6 +38,6 @@ git -C "$repo_root" archive \
   --format=tar.gz \
   --prefix="canvasforge-${version}/" \
   -o "$archive" \
-  HEAD
+  'HEAD^{tree}'
 
 echo "$archive"
