@@ -13,7 +13,7 @@ conflicts=('canvasforge')
 options=('!debug')
 _tagver="${pkgver/_beta/-beta.}"
 source=("canvasforge-${_tagver}.tar.gz::${url}/releases/download/v${_tagver}/canvasforge-${_tagver}.tar.gz")
-sha256sums=('29e4513074271723d043aae4abb0ef959beb787da90cc3474fc435dc3a352ac8')
+sha256sums=('b93840fd0fef2919d141173feefdd5071e2312e1adfcd67f3e6390a26dd09634')
 
 package() {
   cd "canvasforge-${_tagver}"
