@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.1] - 2026-05-08
+
+### Added
+- **Beta release channel:** Switched CanvasForge to explicit beta versioning so GitHub prereleases and Arch/Omarchy AUR updates can track the same tag series.
+- **AUR beta packaging:** Added a `canvasforge-beta` PKGBUILD workflow that installs CanvasForge into standard Linux system paths for Arch and Omarchy users.
+- **Release automation:** Added helper scripts for preparing prerelease tags, GitHub prereleases, and refreshed AUR metadata.
+
 ## [2026-05-08 06:15] Clipboard canvas paste and toolbar fit
 
 ### Added

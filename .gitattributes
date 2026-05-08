@@ -1,0 +1,8 @@
+packaging/aur/ export-ignore
+.github/ export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+screenshots/ export-ignore
+pasted_logs/ export-ignore
+wizwam-code-review/ export-ignore
+dist/ export-ignore

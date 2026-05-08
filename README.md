@@ -1,6 +1,6 @@
 # CanvasForge
 
-**Version 1.5.0 now available!**
+**Beta 0.6.0-beta.1 now available!**
 - 🎨 New cartoony icon theme with consistent 48×48 buttons and text alignment
 - 🧩 Fully modular plugin system with live reload, bundled Crop Tool example
 - 🔄 Comprehensive undo/redo infrastructure across the entire application
@@ -54,7 +54,19 @@ CanvasForge is a PyQt6-powered canvas utility focused on quickly remixing screen
 
 Installation has been verified on both **Pop!_OS** (Flatpak or local virtualenv) and **Omarchy Arch Linux**. The helper script tolerates broken `.venv` states and retries package installs, which makes reinstalls more reliable on rolling‑release systems like Arch.
 
-#### Flatpak (recommended)
+#### Arch / Omarchy AUR beta package
+
+CanvasForge is currently beta software. The preferred Arch/Omarchy package channel is `canvasforge-beta`, which follows GitHub prerelease tags such as `v0.6.0-beta.1`.
+
+```bash
+yay -S canvasforge-beta
+```
+
+After that, Omarchy's built-in update flow or a normal AUR helper update will pick up new beta releases once the AUR package is updated:
+
+```bash
+yay -Syu
+```
 
 #### Flatpak (recommended)
 
@@ -114,6 +126,7 @@ The installer now auto-heals unhealthy virtual environments and retries Python d
 - `main.py` – Entire PyQt6 application, including the custom `CanvasView`, item classes, selection overlay, flatten/save helpers, and menu/toolbar wiring.
 - `assets/toolbar_icons/` – Toolbar icon PNGs.
 - `artifacts/` – Sample vector callouts bundled for quick use.
+- `packaging/aur/canvasforge-beta/` – AUR beta package recipe and release checklist.
 - `requirements.txt` – Runtime dependencies (currently only PyQt6).
 
 ## Contributing
