@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.4] - 2026-05-14
+
+### Changed
+- **Grok clipboard JPEG defaults:** Clipboard base64 handoff now saves and copies JPEG images instead of PNG, scaling the longest side to 1440px and encoding at quality 88 to avoid Grok TUI dimension and base64 warnings.
+
 ## [0.6.0-beta.3] - 2026-05-14
 
 ### Added

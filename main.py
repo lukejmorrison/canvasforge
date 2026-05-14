@@ -28,7 +28,9 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider)
 import shutil
 
-__version__ = "0.6.0-beta.3"
+__version__ = "0.6.0-beta.4"
+CLIPBOARD_JPEG_MAX_SIDE = 1440
+CLIPBOARD_JPEG_QUALITY = 88
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
@@ -5035,7 +5037,7 @@ class PreferencesDialog(QDialog):
 
         self.agent_target_combo = QComboBox()
         self.agent_target_combo.addItem("Clipboard (path)", "clipboard")
-        self.agent_target_combo.addItem("Clipboard (base64 image)", "clipboard_base64")
+        self.agent_target_combo.addItem("Clipboard (base64 JPEG)", "clipboard_base64")
         self.agent_target_combo.addItem("Codex", "codex")
         self.agent_target_combo.addItem("VS Code Codex", "vscode_codex")
         self.agent_target_combo.addItem("Claude", "claude")
@@ -5087,7 +5089,8 @@ class PreferencesDialog(QDialog):
             "CanvasForge POSTs the same values as JSON instead of launching a command. "
             "VS Code Codex opens the bundle folder in VS Code and copies the ready prompt. "
             "Clipboard path saves a PNG to your save folder and copies the image path. "
-            "Clipboard base64 copies a data:image/png;base64 URL for tools like Grok."
+            "Clipboard base64 saves and copies a JPEG data URL for tools like Grok "
+            f"(longest side {CLIPBOARD_JPEG_MAX_SIDE}px, quality {CLIPBOARD_JPEG_QUALITY})."
         )
         info.setStyleSheet("color: #888; font-size: 11px;")
         info.setWordWrap(True)
@@ -6286,19 +6289,19 @@ class MainWindow(QMainWindow):
             f"Annotation bundle at {bundle_dir} (path copied to clipboard)", 8000
         )
 
-    def _next_agent_clipboard_image_path(self) -> Path:
+    def _next_agent_clipboard_image_path(self, suffix: str = ".png") -> Path:
         self._ensure_save_directory()
         base_name = datetime.date.today().strftime("%Y-%m-%d") + "_CanvasForge"
         counter = 1
         while True:
-            candidate = self.default_save_dir / f"{base_name}_{counter}.png"
+            candidate = self.default_save_dir / f"{base_name}_{counter}{suffix}"
             if not candidate.exists():
                 return candidate
             counter += 1
 
     def _notify_clipboard_image_path(self, image_path: Path, copied_value: str = "path"):
-        if copied_value == "base64":
-            message = f"Base64 image URL copied to clipboard:\n{image_path}"
+        if copied_value == "jpeg_base64":
+            message = f"JPEG image URL copied to clipboard:\n{image_path}"
         else:
             message = f"Image path copied to clipboard:\n{image_path}"
         self._status_bar.showMessage(message.replace("\n", " "), 7000)
@@ -6323,22 +6326,51 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _encoded_image_bytes(self, image: QImage, image_format: str, quality: int = -1) -> bytes | None:
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        if not image.save(buffer, image_format, quality):
+            return None
+        return bytes(buffer.data())
+
+    def _grok_clipboard_jpeg_image(self, image: QImage) -> QImage:
+        if max(image.width(), image.height()) > CLIPBOARD_JPEG_MAX_SIDE:
+            image = image.scaled(
+                CLIPBOARD_JPEG_MAX_SIDE,
+                CLIPBOARD_JPEG_MAX_SIDE,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        if image.hasAlphaChannel():
+            flattened = QImage(image.size(), QImage.Format.Format_RGB32)
+            flattened.fill(Qt.GlobalColor.white)
+            painter = QPainter(flattened)
+            painter.drawImage(0, 0, image)
+            painter.end()
+            image = flattened
+        return image.convertToFormat(QImage.Format.Format_RGB888)
+
     def _clipboard_image_mime_data(self, image: QImage, image_path: Path, as_base64: bool) -> QMimeData | None:
         import base64
 
-        buffer = QBuffer()
-        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        if not image.save(buffer, "PNG"):
-            return None
-        png_bytes = bytes(buffer.data())
-
         mime_data = QMimeData()
-        mime_data.setData("image/png", QByteArray(png_bytes))
-        mime_data.setImageData(image)
         mime_data.setUrls([QUrl.fromLocalFile(str(image_path))])
         if as_base64:
-            image_text = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+            jpeg_image = self._grok_clipboard_jpeg_image(image)
+            jpeg_bytes = self._encoded_image_bytes(
+                jpeg_image, "JPEG", CLIPBOARD_JPEG_QUALITY
+            )
+            if jpeg_bytes is None:
+                return None
+            mime_data.setData("image/jpeg", QByteArray(jpeg_bytes))
+            mime_data.setImageData(jpeg_image)
+            image_text = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
         else:
+            png_bytes = self._encoded_image_bytes(image, "PNG")
+            if png_bytes is None:
+                return None
+            mime_data.setData("image/png", QByteArray(png_bytes))
+            mime_data.setImageData(image)
             image_text = str(image_path)
         mime_data.setText(image_text)
         return mime_data
@@ -6353,16 +6385,19 @@ class MainWindow(QMainWindow):
         if image is None:
             self._status_bar.showMessage("Nothing on canvas to send", 4000)
             return None
-        image_path = self._next_agent_clipboard_image_path()
-        if not image.save(str(image_path)):
+        image_to_save = self._grok_clipboard_jpeg_image(image) if as_base64 else image
+        image_path = self._next_agent_clipboard_image_path(".jpg" if as_base64 else ".png")
+        save_format = "JPEG" if as_base64 else "PNG"
+        save_quality = CLIPBOARD_JPEG_QUALITY if as_base64 else -1
+        if not image_to_save.save(str(image_path), save_format, save_quality):
             self._status_bar.showMessage(f"ERROR: Failed to save image to {image_path}", 5000)
             return None
-        mime_data = self._clipboard_image_mime_data(image, image_path, as_base64)
+        mime_data = self._clipboard_image_mime_data(image_to_save, image_path, as_base64)
         if mime_data is None:
             self._status_bar.showMessage("ERROR: Failed to encode image for clipboard", 5000)
             return None
         QApplication.clipboard().setMimeData(mime_data)
-        self._notify_clipboard_image_path(image_path, "base64" if as_base64 else "path")
+        self._notify_clipboard_image_path(image_path, "jpeg_base64" if as_base64 else "path")
         return image_path
 
     def send_to_agent(self):
