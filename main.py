@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider)
 import shutil
 
-__version__ = "0.6.0-beta.1"
+__version__ = "0.6.0-beta.2"
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
@@ -5034,6 +5034,7 @@ class PreferencesDialog(QDialog):
         cli_form = QFormLayout(cli_group)
 
         self.agent_target_combo = QComboBox()
+        self.agent_target_combo.addItem("Clipboard", "clipboard")
         self.agent_target_combo.addItem("Codex", "codex")
         self.agent_target_combo.addItem("VS Code Codex", "vscode_codex")
         self.agent_target_combo.addItem("Claude", "claude")
@@ -5083,7 +5084,8 @@ class PreferencesDialog(QDialog):
             "If nothing is selected, the whole canvas is bundled. Command placeholders: "
             "{prompt}, {image}, {json}, {dir}, {agent}. If an HTTP endpoint is set, "
             "CanvasForge POSTs the same values as JSON instead of launching a command. "
-            "VS Code Codex opens the bundle folder in VS Code and copies the ready prompt."
+            "VS Code Codex opens the bundle folder in VS Code and copies the ready prompt. "
+            "Clipboard saves a PNG to your save folder and copies the image path."
         )
         info.setStyleSheet("color: #888; font-size: 11px;")
         info.setWordWrap(True)
@@ -6282,14 +6284,70 @@ class MainWindow(QMainWindow):
             f"Annotation bundle at {bundle_dir} (path copied to clipboard)", 8000
         )
 
+    def _next_agent_clipboard_image_path(self) -> Path:
+        self._ensure_save_directory()
+        base_name = datetime.date.today().strftime("%Y-%m-%d") + "_CanvasForge"
+        counter = 1
+        while True:
+            candidate = self.default_save_dir / f"{base_name}_{counter}.png"
+            if not candidate.exists():
+                return candidate
+            counter += 1
+
+    def _notify_clipboard_image_path(self, image_path: Path):
+        message = f"Image path copied to clipboard:\n{image_path}"
+        self._status_bar.showMessage(message.replace("\n", " "), 7000)
+        notify_send = shutil.which("notify-send")
+        if not notify_send:
+            return
+        try:
+            subprocess.Popen(
+                [
+                    notify_send,
+                    "-a",
+                    "CanvasForge",
+                    "-t",
+                    "3500",
+                    "CanvasForge",
+                    message,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception:
+            pass
+
+    def _send_to_clipboard_agent(self) -> Path | None:
+        selected_items = self._selected_layer_items()
+        image_items = selected_items or self.layer_list.graphics_items()
+        if not image_items:
+            self._status_bar.showMessage("Nothing on canvas to send", 4000)
+            return None
+        image = self._capture_scene_image(image_items)
+        if image is None:
+            self._status_bar.showMessage("Nothing on canvas to send", 4000)
+            return None
+        image_path = self._next_agent_clipboard_image_path()
+        if not image.save(str(image_path)):
+            self._status_bar.showMessage(f"ERROR: Failed to save image to {image_path}", 5000)
+            return None
+        QApplication.clipboard().setText(str(image_path))
+        self._notify_clipboard_image_path(image_path)
+        return image_path
+
     def send_to_agent(self):
         """Build a selected-image bundle and send it to the configured agent."""
+        target = str(self.settings.value("agent/target", "claude") or "claude")
+        if target == "clipboard":
+            self._send_to_clipboard_agent()
+            return
+
         bundle_dir = self._build_annotation_bundle()
         if bundle_dir is None:
             return
         png_path = next(bundle_dir.glob("*.png"))
         json_path = bundle_dir / "annotations.json"
-        target = str(self.settings.value("agent/target", "claude") or "claude")
 
         prompt_template = self.settings.value(
             "agent/prompt_template",

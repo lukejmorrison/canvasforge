@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.2] - 2026-05-14
+
+### Added
+- **Clipboard agent handoff:** Agent preferences now include a Clipboard target that saves the selected layers as a PNG in the configured CanvasForge save folder, copies the image path, and triggers a desktop notification.
+
 ## [0.6.0-beta.1] - 2026-05-08
 
 ### Added
