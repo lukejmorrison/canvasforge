@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider)
 import shutil
 
-__version__ = "0.6.0-beta.2"
+__version__ = "0.6.0-beta.3"
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
@@ -5034,7 +5034,8 @@ class PreferencesDialog(QDialog):
         cli_form = QFormLayout(cli_group)
 
         self.agent_target_combo = QComboBox()
-        self.agent_target_combo.addItem("Clipboard", "clipboard")
+        self.agent_target_combo.addItem("Clipboard (path)", "clipboard")
+        self.agent_target_combo.addItem("Clipboard (base64 image)", "clipboard_base64")
         self.agent_target_combo.addItem("Codex", "codex")
         self.agent_target_combo.addItem("VS Code Codex", "vscode_codex")
         self.agent_target_combo.addItem("Claude", "claude")
@@ -5085,7 +5086,8 @@ class PreferencesDialog(QDialog):
             "{prompt}, {image}, {json}, {dir}, {agent}. If an HTTP endpoint is set, "
             "CanvasForge POSTs the same values as JSON instead of launching a command. "
             "VS Code Codex opens the bundle folder in VS Code and copies the ready prompt. "
-            "Clipboard saves a PNG to your save folder and copies the image path."
+            "Clipboard path saves a PNG to your save folder and copies the image path. "
+            "Clipboard base64 copies a data:image/png;base64 URL for tools like Grok."
         )
         info.setStyleSheet("color: #888; font-size: 11px;")
         info.setWordWrap(True)
@@ -6294,8 +6296,11 @@ class MainWindow(QMainWindow):
                 return candidate
             counter += 1
 
-    def _notify_clipboard_image_path(self, image_path: Path):
-        message = f"Image path copied to clipboard:\n{image_path}"
+    def _notify_clipboard_image_path(self, image_path: Path, copied_value: str = "path"):
+        if copied_value == "base64":
+            message = f"Base64 image URL copied to clipboard:\n{image_path}"
+        else:
+            message = f"Image path copied to clipboard:\n{image_path}"
         self._status_bar.showMessage(message.replace("\n", " "), 7000)
         notify_send = shutil.which("notify-send")
         if not notify_send:
@@ -6318,7 +6323,27 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _send_to_clipboard_agent(self) -> Path | None:
+    def _clipboard_image_mime_data(self, image: QImage, image_path: Path, as_base64: bool) -> QMimeData | None:
+        import base64
+
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        if not image.save(buffer, "PNG"):
+            return None
+        png_bytes = bytes(buffer.data())
+
+        mime_data = QMimeData()
+        mime_data.setData("image/png", QByteArray(png_bytes))
+        mime_data.setImageData(image)
+        mime_data.setUrls([QUrl.fromLocalFile(str(image_path))])
+        if as_base64:
+            image_text = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+        else:
+            image_text = str(image_path)
+        mime_data.setText(image_text)
+        return mime_data
+
+    def _send_to_clipboard_agent(self, as_base64: bool = False) -> Path | None:
         selected_items = self._selected_layer_items()
         image_items = selected_items or self.layer_list.graphics_items()
         if not image_items:
@@ -6332,15 +6357,19 @@ class MainWindow(QMainWindow):
         if not image.save(str(image_path)):
             self._status_bar.showMessage(f"ERROR: Failed to save image to {image_path}", 5000)
             return None
-        QApplication.clipboard().setText(str(image_path))
-        self._notify_clipboard_image_path(image_path)
+        mime_data = self._clipboard_image_mime_data(image, image_path, as_base64)
+        if mime_data is None:
+            self._status_bar.showMessage("ERROR: Failed to encode image for clipboard", 5000)
+            return None
+        QApplication.clipboard().setMimeData(mime_data)
+        self._notify_clipboard_image_path(image_path, "base64" if as_base64 else "path")
         return image_path
 
     def send_to_agent(self):
         """Build a selected-image bundle and send it to the configured agent."""
         target = str(self.settings.value("agent/target", "claude") or "claude")
-        if target == "clipboard":
-            self._send_to_clipboard_agent()
+        if target in ("clipboard", "clipboard_base64"):
+            self._send_to_clipboard_agent(as_base64=(target == "clipboard_base64"))
             return
 
         bundle_dir = self._build_annotation_bundle()

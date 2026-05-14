@@ -41,10 +41,10 @@ package() {
 exec python /usr/share/canvasforge/main.py "$@"
 EOF
 
-  install -Dm644 /dev/stdin "${pkgdir}/usr/share/applications/canvasforge.desktop" <<'EOF'
+  install -Dm644 /dev/stdin "${pkgdir}/usr/share/applications/canvasforge.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=CanvasForge Beta
+Name=CanvasForge Beta ${_tagver}
 Comment=Remix screenshots, snippets, and vectors
 Exec=canvasforge
 Icon=canvasforge

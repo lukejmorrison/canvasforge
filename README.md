@@ -1,6 +1,6 @@
 # CanvasForge
 
-**Beta 0.6.0-beta.1 now available!**
+**Beta 0.6.0-beta.3 now available!**
 - 🎨 New cartoony icon theme with consistent 48×48 buttons and text alignment
 - 🧩 Fully modular plugin system with live reload, bundled Crop Tool example
 - 🔄 Comprehensive undo/redo infrastructure across the entire application
@@ -119,7 +119,7 @@ The installer now auto-heals unhealthy virtual environments and retries Python d
 - Drag resize handles with standard modifiers: no key keeps proportions, Shift/Ctrl allows independent width/height, Alt resizes from center, Ctrl+Shift skews where supported, and Ctrl+Alt+Shift applies perspective-style transforms where supported.
 - Use *Flatten Selected* or *Flatten All* from the toolbar/menu to rasterize layers. The operations create a new raster artifact without destroying originals until you remove them.
 - Saving (`Ctrl/Cmd+S`) renders the scene without showing selection handles and writes a PNG to your default Pictures/CanvasForge directory. Change this directory via **Edit → Settings → Save Directory**; CanvasForge persists the choice using `QSettings`.
-- Use *Save Selected* (`Ctrl+Alt+S`) to write just the selected layers. Use *Send to Agent* (`Ctrl+Shift+A`) to create a temp bundle with `selected.png` and `annotations.json`; configure the command, VS Code Codex folder handoff, HTTP endpoint, or Clipboard image-path handoff under **Edit → Preferences → Agent**.
+- Use *Save Selected* (`Ctrl+Alt+S`) to write just the selected layers. Use *Send to Agent* (`Ctrl+Shift+A`) to create a temp bundle with `selected.png` and `annotations.json`; configure the command, VS Code Codex folder handoff, HTTP endpoint, Clipboard image-path handoff, or Clipboard base64 image handoff under **Edit → Preferences → Agent**.
 
 ## Project Layout
 

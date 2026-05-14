@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.3] - 2026-05-14
+
+### Added
+- **Grok-friendly clipboard encoding:** Added a Clipboard base64 image target that copies a `data:image/png;base64,...` payload and PNG clipboard image data for tools that reject local filesystem paths.
+- **Versioned app menu label:** The AUR desktop launcher now includes the beta version in the Omarchy app menu name.
+
 ## [0.6.0-beta.2] - 2026-05-14
 
 ### Added
