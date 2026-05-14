@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.5] - 2026-05-14 18:19
+
+### Fixed
+- **Grok TUI JPEG clipboard paste:** Removed `setImageData()` for the "Clipboard (base64 JPEG)" target. This prevents Qt from auto-registering an `image/png` fallback, ensuring native clipboard consumers like Grok TUI receive only the properly encoded `image/jpeg` bytes (resized/flattened JPEG) when pasting images. The base64 data URL is still available in text for tools that need it.
+
 ## [0.6.0-beta.4] - 2026-05-14
 
 ### Changed

@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider)
 import shutil
 
-__version__ = "0.6.0-beta.4"
+__version__ = "0.6.0-beta.5"
 CLIPBOARD_JPEG_MAX_SIDE = 1440
 CLIPBOARD_JPEG_QUALITY = 88
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
@@ -5089,7 +5089,8 @@ class PreferencesDialog(QDialog):
             "CanvasForge POSTs the same values as JSON instead of launching a command. "
             "VS Code Codex opens the bundle folder in VS Code and copies the ready prompt. "
             "Clipboard path saves a PNG to your save folder and copies the image path. "
-            "Clipboard base64 saves and copies a JPEG data URL for tools like Grok "
+            "Clipboard base64 saves a JPEG file + data URL, and puts native image/jpeg on the "
+            f"clipboard (no PNG fallback) so Grok TUI and similar paste the JPG properly "
             f"(longest side {CLIPBOARD_JPEG_MAX_SIDE}px, quality {CLIPBOARD_JPEG_QUALITY})."
         )
         info.setStyleSheet("color: #888; font-size: 11px;")
@@ -6301,7 +6302,7 @@ class MainWindow(QMainWindow):
 
     def _notify_clipboard_image_path(self, image_path: Path, copied_value: str = "path"):
         if copied_value == "jpeg_base64":
-            message = f"JPEG image URL copied to clipboard:\n{image_path}"
+            message = f"JPEG image (for Grok TUI paste) + data URL copied to clipboard. File: {image_path}"
         else:
             message = f"Image path copied to clipboard:\n{image_path}"
         self._status_bar.showMessage(message.replace("\n", " "), 7000)
@@ -6363,7 +6364,10 @@ class MainWindow(QMainWindow):
             if jpeg_bytes is None:
                 return None
             mime_data.setData("image/jpeg", QByteArray(jpeg_bytes))
-            mime_data.setImageData(jpeg_image)
+            # Note: intentionally NOT calling setImageData() here. This ensures only
+            # image/jpeg is offered on the clipboard (no auto-generated image/png from
+            # Qt). This makes Grok TUI (and similar native clipboard consumers) receive
+            # the properly encoded JPEG when pasting images.
             image_text = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
         else:
             png_bytes = self._encoded_image_bytes(image, "PNG")
