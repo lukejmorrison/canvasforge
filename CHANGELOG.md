@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.6] - 2026-05-14 18:40
+
+### Fixed
+- **Grok TUI local path rejection on image paste:** For the "Clipboard (base64 JPEG)" target we now completely omit `setUrls()` (and therefore the `file://` entry in text/uri-list). Previously the local save path was still being advertised on the clipboard, causing Grok TUI to sometimes pick a local filesystem path for the `image_url` field and get the "must be base64 or URL" 400 error. The target now only ever exposes the raw `image/jpeg` bytes + the `data:image/jpeg;base64,...` string — nothing local leaks onto the clipboard.
+- **Grok TUI JPEG clipboard paste (follow-up):** The removal of `setImageData()` from beta.5 is kept so only JPEG (never a PNG fallback) is offered for the binary image part.
+
 ## [0.6.0-beta.5] - 2026-05-14 18:19
 
 ### Fixed

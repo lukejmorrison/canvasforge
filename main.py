@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider)
 import shutil
 
-__version__ = "0.6.0-beta.5"
+__version__ = "0.6.0-beta.6"
 CLIPBOARD_JPEG_MAX_SIDE = 1440
 CLIPBOARD_JPEG_QUALITY = 88
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
@@ -6355,7 +6355,13 @@ class MainWindow(QMainWindow):
         import base64
 
         mime_data = QMimeData()
-        mime_data.setUrls([QUrl.fromLocalFile(str(image_path))])
+        if not as_base64:
+            # Only advertise the local file path for the simple "path" target.
+            # For the base64 JPEG target we intentionally omit this so Grok TUI
+            # (and similar tools) never see a local filesystem path in text/uri-list
+            # or as an image_url. They get either the raw image/jpeg bytes or the
+            # data:image/jpeg;base64,... string instead.
+            mime_data.setUrls([QUrl.fromLocalFile(str(image_path))])
         if as_base64:
             jpeg_image = self._grok_clipboard_jpeg_image(image)
             jpeg_bytes = self._encoded_image_bytes(
