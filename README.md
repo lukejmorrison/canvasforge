@@ -1,91 +1,85 @@
 # CanvasForge
 
-**Beta 0.6.0-beta.4 now available!**
-- 🎨 New cartoony icon theme with consistent 48×48 buttons and text alignment
-- 🧩 Fully modular plugin system with live reload, bundled Crop Tool example
-- 🔄 Comprehensive undo/redo infrastructure across the entire application
-- 🎭 Appearance tab lets you pick icon themes from `assets/toolbar_icons/`
-- 🔧 Robust icon loader with SVG/PNG fallbacks and missing‑icon placeholders
+[![Release](https://img.shields.io/github/v/release/lukejmorrison/canvasforge?include_prereleases&sort=semver)](https://github.com/lukejmorrison/canvasforge/releases)
+[![AUR](https://img.shields.io/aur/version/canvasforge-beta)](https://aur.archlinux.org/packages/canvasforge-beta)
+[![License](https://img.shields.io/github/license/lukejmorrison/canvasforge)](LICENSE)
 
-CanvasForge is a PyQt6-powered canvas utility focused on quickly remixing screenshots, UI snippets, and vector assets. It combines clipboard-aware importing, precise selection overlays, and flatten/save workflows so you can compose documentation-ready visuals without leaving the desktop.
+**The polished screenshot annotation canvas for Omarchy Arch Linux + Hyprland.**
 
-## Highlights
+CanvasForge is a fast PyQt6 canvas made for turning raw screenshots into beautiful, documentation-ready visuals. It shines brightest on **Omarchy**, where it integrates deeply as a first-class screenshot editor, scratchpad citizen, and Grok TUI companion.
 
-- **Flexible importing:** Paste raster images, SVG markup, file paths, or plain text directly from the clipboard; SVGs stay editable as vector items.
-- **Cutouts:** Use the Cutout toolbar action to draw rectangular regions on raster layers, drag them elsewhere, duplicate them, or delete them, all while keeping handles and overlays responsive.
-- **Consistent context menus:** Every canvas item (text, vector, raster, overlays) forwards right-clicks to a unified menu for copy/delete and other actions.
-- **Text tooling:** Double-click to edit text items with proper cursor management; escape exits edit mode cleanly.
-- **Flattening & saving:** Convert selected layers or the entire scene into new raster artifacts, then auto-save to a Pictures/CanvasForge folder (configurable in settings). Blue control handles are hidden before rendering so exports stay clean.
-- **Selected export + agent handoff:** Use the toolbar disk icon to save selected layers as a clean PNG, or Send to Agent to bundle the selected image and annotations for Codex, VS Code Codex, Claude, OpenClaw, or a Wizwam Agent Platform endpoint.
-- **Layer + artifact lists:** Side panels keep imported resources and active scene layers in sync, supporting Ctrl/Cmd multi-select for flattening or deletion.
-- **Image Library sidebar:** A docked thumbnail browser watches your OS screenshots folder (defaults to `~/Pictures/Screenshots`) with search, sorting, zoom, and drag/export controls so external references are always one click away.
-- **Dark Mode & Custom Icons:** The application features a sleek dark mode and uses external icon files in `assets/toolbar_icons/`. Users can customize the toolbar by replacing these images. The system will load `icon_name.png` first; if missing, it falls back to `icon_name.svg`. Filenames are stripped of resolution info (e.g. `toolbar_icon_pointer`).
-- **Desktop-ready branding:** A dedicated app icon in `assets/app_icons/canvasForge_app_icon.png` keeps the Pop!_OS launcher and task switcher on-brand. The installer script copies this icon system-wide so CanvasForge shows up under Audio & Video.
+## 🚀 Omarchy Integration (First-Class Citizen)
+
+CanvasForge is designed from the ground up to feel native on Omarchy Arch Linux:
+
+- **Print Screen → CanvasForge** — Set `OMARCHY_SCREENSHOT_EDITOR=canvasforge` and every screenshot opens directly in CanvasForge with the correct monitor resolution.
+- **Super + S Scratchpad** — Enable "Launch in Omarchy Scratchpad" in Preferences. CanvasForge lives in your scratchpad and appears on whatever monitor your mouse is on.
+- **Monitor-Accurate Canvas** — Automatically creates a canvas that matches your physical monitor resolution (correctly handles fractional scaling like `scale 1.2`).
+- **Grok TUI Optimized** — One-click **Send to Agent → Clipboard (base64 JPEG)** puts clean, properly-sized images on the clipboard that paste perfectly into Grok.
+- **HiDPI & Fractional Scaling** — Proper support for modern high-DPI and scaled displays common in Omarchy setups.
+
+See the [full Omarchy setup guide](#omarchy-setup) below.
+
+## ✨ Features
+
+- **Screenshot Editor for Omarchy** — Deep integration as a Print Screen replacement with monitor-accurate canvases and scratchpad support.
+- **Powerful Annotation Tools** — Arrows, callouts, steps, blur, highlight, borders, text, and vector shapes with live previews.
+- **Smart Selection & Cutouts** — Draw regions on images, move them around, or extract them cleanly.
+- **Layer & Repository System** — Full layer management + a persistent image library that watches your Screenshots folder.
+- **One-Click Agent Handoff** — Send to Claude, Codex, OpenClaw, Wizwam, or directly to Grok TUI via clean clipboard JPEG.
+- **Flawless Export** — Flatten selected or all layers with hidden handles for pixel-perfect output.
+- **Beautiful Theming** — Multiple icon themes, dark mode, and fully customizable toolbar.
+- **HiDPI & Fractional Scaling** — Excellent support for modern displays with non-integer scaling (common in Omarchy).
 
 ## Getting Started
 
-1. **Clone the repo**
-
-   ```bash
-   git clone https://github.com/lukejmorrison/canvasforge.git
-   cd canvasforge
-   ```
-
-2. **Create a virtual environment** (optional but recommended)
-
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-   ```
-
-3. **Install dependencies**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Run CanvasForge**
-
-   ```bash
-   python main.py
-   ```
-
-### Pop!_OS & Omarchy Arch installs
-
-Installation has been verified on both **Pop!_OS** (Flatpak or local virtualenv) and **Omarchy Arch Linux**. The helper script tolerates broken `.venv` states and retries package installs, which makes reinstalls more reliable on rolling‑release systems like Arch.
-
-#### Arch / Omarchy AUR beta package
-
-CanvasForge is currently beta software. The preferred Arch/Omarchy package channel is `canvasforge-beta`, which follows GitHub prerelease tags such as `v0.6.0-beta.1`.
+### Omarchy / Arch Linux (Recommended)
 
 ```bash
 yay -S canvasforge-beta
 ```
 
-After that, Omarchy's built-in update flow or a normal AUR helper update will pick up new beta releases once the AUR package is updated:
+Then just press **Print Screen**. CanvasForge will handle the rest.
 
-```bash
-yay -Syu
-```
+See the [full Omarchy setup](#omarchy-setup) above for scratchpad + multi-monitor configuration.
 
-#### Flatpak (recommended)
+### Other Systems
 
+**Flatpak**
 ```bash
 bash scripts/build_flatpak.sh
 flatpak run com.lukejmorrison.CanvasForge
 ```
 
-The script wraps `flatpak-builder`, automatically installs the KDE 6.8 runtime/SDK the first time, downloads the required PyPI wheels on the host, and then performs the build fully offline inside the sandbox. Subsequent runs rebuild and update in place.
-
-#### Local virtual environment
-
+**Local Install (any Linux)**
 ```bash
-bash scripts/install_canvasforge.sh
+bash scripts/install_canvasforge.sh --local
+canvasforge
 ```
 
-This helper installs into `~/.local/share/canvasforge`, drops a `canvasforge` launcher in `~/.local/bin`, copies the branded icon, and registers a `.desktop` entry in the Audio & Video category.
+**From Source**
+```bash
+git clone https://github.com/lukejmorrison/canvasforge.git
+cd canvasforge
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
 
-Useful installer modes:
+### Other Distributions
+
+**Flatpak**
+```bash
+bash scripts/build_flatpak.sh
+flatpak run com.lukejmorrison.CanvasForge
+```
+
+**Local Install**
+```bash
+bash scripts/install_canvasforge.sh --local
+```
+
+The installer is robust and works well on Pop!_OS, Fedora, and other distributions.
 
 ```bash
 # Standard install/update from GitHub
@@ -120,6 +114,68 @@ The installer now auto-heals unhealthy virtual environments and retries Python d
 - Use *Flatten Selected* or *Flatten All* from the toolbar/menu to rasterize layers. The operations create a new raster artifact without destroying originals until you remove them.
 - Saving (`Ctrl/Cmd+S`) renders the scene without showing selection handles and writes a PNG to your default Pictures/CanvasForge directory. Change this directory via **Edit → Settings → Save Directory**; CanvasForge persists the choice using `QSettings`.
 - Use *Save Selected* (`Ctrl+Alt+S`) to write just the selected layers. Use *Send to Agent* (`Ctrl+Shift+A`) to create a temp bundle with `selected.png` and `annotations.json`; configure the command, VS Code Codex folder handoff, HTTP endpoint, Clipboard image-path handoff, or Clipboard base64 JPEG handoff under **Edit → Preferences → Agent**. The base64 JPEG handoff targets Grok-friendly defaults: longest side 1440px, quality 88.
+
+## Omarchy Setup (Recommended)
+
+CanvasForge is built to feel at home on **Omarchy Arch Linux**.
+
+### 1. Set as Default Screenshot Editor
+
+```bash
+# One-time
+OMARCHY_SCREENSHOT_EDITOR=canvasforge omarchy capture screenshot
+
+# Permanent (recommended)
+echo 'OMARCHY_SCREENSHOT_EDITOR=canvasforge' > ~/.config/environment.d/omarchy-screenshot.conf
+```
+
+Or use the dedicated flag for scripts and agents:
+
+```bash
+canvasforge --screenshot-editor /path/to/screenshot.png
+```
+
+### 2. Enable Scratchpad Mode (Power User Favorite)
+
+1. In CanvasForge go to **Preferences → Canvas → Screenshot Editor**
+2. Check **"Launch screenshot editor in Omarchy Scratchpad"**
+3. In **Window → Startup Behavior**, select **"Open on Screen with Mouse"**
+
+Add these lines to your Hyprland config:
+
+```hyprland
+# Toggle CanvasForge
+bind = SUPER, S, togglespecialworkspace, canvasforge
+
+# Rules
+windowrulev2 = workspace special:canvasforge, class:^(CanvasForge)$
+windowrulev2 = float, class:^(CanvasForge)$
+windowrulev2 = size 80% 80%, class:^(CanvasForge)$
+```
+
+Now **Print Screen** sends the capture to your scratchpad. Press **Super + S** and CanvasForge appears on whatever monitor your mouse is on, with a perfectly sized canvas.
+
+### 3. Monitor Resolution & Scaling
+
+CanvasForge automatically uses your monitor’s **physical** resolution (correctly handles `scale 1.2`, `1.6`, etc.). You can also force a specific monitor in Preferences.
+
+See the full list of options in **Preferences → Canvas → Screenshot Editor**.
+
+**Advanced / AI Agent Usage**
+
+You can force screenshot editor mode with a dedicated flag:
+
+```bash
+canvasforge --screenshot-editor /path/to/screenshot.png
+```
+
+This is useful for scripts, Omarchy hooks, or AI agents.
+
+In **Preferences → Canvas → Screenshot Editor**, you can also enable:
+- "Launch screenshot editor in Omarchy Scratchpad" (hides the window until you press your toggle key)
+- Choose which monitor's resolution to use for the canvas
+
+This makes `Super + S` (scratchpad toggle) bring up CanvasForge on the monitor your mouse is currently on.
 
 ## Project Layout
 

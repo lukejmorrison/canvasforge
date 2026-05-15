@@ -28,9 +28,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider)
 import shutil
 
-__version__ = "0.6.0-beta.6"
+__version__ = "0.6.0-beta.7"
 CLIPBOARD_JPEG_MAX_SIDE = 1440
 CLIPBOARD_JPEG_QUALITY = 88
+
+# Supported image extensions for CLI opening (screenshot editor integration, drag/drop, etc.)
+SUPPORTED_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg')
+
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
@@ -3667,38 +3671,26 @@ class CanvasView(QGraphicsView):
         path = os.path.expanduser(path)
         if not os.path.isfile(path):
             return False
-        lower = path.lower()
-        item = None
-        if lower.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')):
-            pixmap = QPixmap(path)
-            if pixmap.isNull():
-                return False
-            # Check if we should scale large images
+
+        item = self.main_window._create_graphic_item_from_path(path)
+        if item is None:
+            return False
+
+        # Extra scaling logic only needed for interactive paste/drop (CLI editor path uses exact size)
+        if isinstance(item, RasterItem):
             scale_large = self.main_window.settings.value("canvas/scale_large_images", False, type=bool)
             if scale_large:
                 viewport_size = self.viewport().size()
                 max_width = viewport_size.width() * 0.9
                 max_height = viewport_size.height() * 0.9
-                if pixmap.width() > max_width or pixmap.height() > max_height:
-                    pixmap = pixmap.scaled(
+                if item.pixmap().width() > max_width or item.pixmap().height() > max_height:
+                    scaled = item.pixmap().scaled(
                         int(max_width), int(max_height),
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation
                     )
-            item = RasterItem(pixmap)
-        elif lower.endswith('.svg'):
-            svg_bytes = None
-            try:
-                svg_bytes = Path(path).read_bytes()
-            except Exception:
-                svg_bytes = None
+                    item = RasterItem(scaled)  # recreate with scaled pixmap
 
-            renderer = QSvgRenderer(svg_bytes) if svg_bytes else QSvgRenderer(path)
-            if not renderer.isValid():
-                return False
-            item = VectorItem(renderer, svg_bytes=svg_bytes, source_path=path)
-        if not item:
-            return False
         item.setPos(scene_pos)
         self.itemAdded.emit(item)
         self.main_window.add_artifact(path)
@@ -3732,9 +3724,6 @@ class CanvasView(QGraphicsView):
             if self._drawing_item is not None:
                 self._abort_drag_preview()
                 return
-        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
-            self.main_window.delete_selected_items()
-            return
         if event.key() == Qt.Key.Key_C:
             if self._copy_selection_or_items():
                 return
@@ -4253,6 +4242,56 @@ class PreferencesDialog(QDialog):
         navigation_layout.addRow("", zoom_desc)
 
         layout.addWidget(navigation_group)
+
+        # Screenshot Editor Group (very useful for Omarchy + Hyprland users)
+        screenshot_group = QGroupBox("Screenshot Editor (Omarchy / Hyprland)")
+        screenshot_layout = QFormLayout(screenshot_group)
+        screenshot_layout.setSpacing(10)
+
+        self.monitor_mode_combo = QComboBox()
+        self.monitor_mode_combo.addItem("Current monitor (where CanvasForge opens)", "current")
+        self.monitor_mode_combo.addItem("Primary monitor", "primary")
+
+        # Populate with actual monitor names (e.g. HDMI-A-1, DP-1)
+        try:
+            for screen in QApplication.screens():
+                name = screen.name() or f"Monitor {screen.serialNumber() or screen.model()}"
+                self.monitor_mode_combo.addItem(f"Specific: {name}", name)
+        except Exception:
+            pass
+
+        saved_monitor_mode = self.settings.value("display/screenshot_monitor_mode", "current") if self.settings else "current"
+        idx = self.monitor_mode_combo.findData(saved_monitor_mode)
+        if idx >= 0:
+            self.monitor_mode_combo.setCurrentIndex(idx)
+
+        screenshot_layout.addRow("Use monitor resolution from:", self.monitor_mode_combo)
+
+        # === Omarchy Scratchpad Mode ===
+        self.use_scratchpad_checkbox = QCheckBox("Launch screenshot editor in Omarchy Scratchpad")
+        saved_scratchpad = self.settings.value("display/use_omarchy_scratchpad", False, type=bool) if self.settings else False
+        self.use_scratchpad_checkbox.setChecked(saved_scratchpad)
+        screenshot_layout.addRow(self.use_scratchpad_checkbox)
+
+        # Nice help text explaining the scratchpad workflow
+        scratchpad_help = QLabel(
+            "<b>How the Scratchpad workflow works:</b><br><br>"
+            "When enabled, CanvasForge will be sent to a hidden scratchpad workspace when you press Print Screen.<br>"
+            "It will be invisible until you press <b>Super + S</b> (or your configured toggle key).<br><br>"
+            "<b>Recommended Hyprland configuration:</b><br>"
+            "<code>bind = SUPER, S, togglespecialworkspace, canvasforge</code><br><br>"
+            "<b>Window rules (add these to your Hyprland config):</b><br>"
+            "<code>windowrulev2 = workspace special:canvasforge, class:^(CanvasForge)$</code><br>"
+            "<code>windowrulev2 = float, class:^(CanvasForge)$</code><br>"
+            "<code>windowrulev2 = size 80% 80%, class:^(CanvasForge)$</code><br><br>"
+            "Also set <b>Window → Startup Behavior → \"Open on Screen with Mouse\"</b> so it appears on the monitor your mouse is on."
+        )
+        scratchpad_help.setStyleSheet("color: #888; font-size: 11px; background-color: #2a2f3a; padding: 8px; border-radius: 4px;")
+        scratchpad_help.setWordWrap(True)
+        scratchpad_help.setTextFormat(Qt.TextFormat.RichText)
+        screenshot_layout.addRow("", scratchpad_help)
+
+        layout.addWidget(screenshot_group)
         layout.addStretch()
         
         return widget
@@ -4819,6 +4858,11 @@ class PreferencesDialog(QDialog):
             self.settings.setValue("window/startup_state_pref", win_settings["state"])
             self.settings.setValue("plugins/editor_path", self.get_editor_path())
             self.settings.setValue("appearance/icon_theme", self.get_icon_theme())
+            # Screenshot Editor monitor preference (used by load_screenshot_for_editing)
+            if hasattr(self, 'monitor_mode_combo'):
+                self.settings.setValue("display/screenshot_monitor_mode", self.monitor_mode_combo.currentData())
+            if hasattr(self, 'use_scratchpad_checkbox'):
+                self.settings.setValue("display/use_omarchy_scratchpad", self.use_scratchpad_checkbox.isChecked())
         super().accept()
     
     def _create_plugins_tab(self):
@@ -5089,9 +5133,9 @@ class PreferencesDialog(QDialog):
             "CanvasForge POSTs the same values as JSON instead of launching a command. "
             "VS Code Codex opens the bundle folder in VS Code and copies the ready prompt. "
             "Clipboard path saves a PNG to your save folder and copies the image path. "
-            "Clipboard base64 saves a JPEG file + data URL, and puts native image/jpeg on the "
-            f"clipboard (no PNG fallback) so Grok TUI and similar paste the JPG properly "
-            f"(longest side {CLIPBOARD_JPEG_MAX_SIDE}px, quality {CLIPBOARD_JPEG_QUALITY})."
+            "Clipboard (base64 JPEG) saves a JPEG and puts native image/jpeg data on the "
+            f"clipboard (no local path, no huge base64 text) so Grok TUI pastes the image "
+            f"cleanly (longest side {CLIPBOARD_JPEG_MAX_SIDE}px, quality {CLIPBOARD_JPEG_QUALITY})."
         )
         info.setStyleSheet("color: #888; font-size: 11px;")
         info.setWordWrap(True)
@@ -5515,6 +5559,10 @@ class MainWindow(QMainWindow):
         actual_size_action.triggered.connect(self.view.actual_size)
         view_menu.addAction(actual_size_action)
 
+        monitor_canvas_action = QAction("Set Canvas to Current Monitor Resolution", self)
+        monitor_canvas_action.triggered.connect(self.set_canvas_to_current_monitor)
+        view_menu.addAction(monitor_canvas_action)
+
         pixel_grid_action = QAction("Pixel Grid", self)
         pixel_grid_action.setCheckable(True)
         pixel_grid_action.setChecked(bool(getattr(self.view, "_pixel_grid_enabled", False)))
@@ -5685,11 +5733,13 @@ class MainWindow(QMainWindow):
                     "is_core": is_core,
                 }
         
-        # Set delete action shortcut
+        # Set delete action shortcut (support both Delete and Backspace keys)
         if "delete" in self._toolbar_action_defs:
-            self._toolbar_action_defs["delete"]["action"].setShortcut(
-                QKeySequence(QKeySequence.StandardKey.Delete)
-            )
+            delete_action = self._toolbar_action_defs["delete"]["action"]
+            delete_action.setShortcuts([
+                QKeySequence(QKeySequence.StandardKey.Delete),
+                QKeySequence(Qt.Key.Key_Backspace)
+            ])
     
     def _get_toolbar_order(self):
         """Get the toolbar order from settings or return default."""
@@ -5858,32 +5908,185 @@ class MainWindow(QMainWindow):
         else:
             self._status_bar.showMessage("Clipboard does not contain a supported paste item", 3000)
 
-    def add_artifact(self, file_path, display_name=None):
-        lower = str(file_path).lower()
+    def load_screenshot_for_editing(self, filepath: str, screenshot_editor_mode: bool = False):
+        """Load an image file (typically a fresh grim screenshot) directly onto the canvas
+        as the base layer. The canvas is sized to the chosen monitor resolution.
+        """
+        item = self._create_graphic_item_from_path(filepath)
+        if item is None:
+            self._status_bar.showMessage(f"Failed to load image: {filepath}", 4000)
+            return False
 
+        # Determine which monitor's resolution to use for the canvas
+        # based on user preference (very useful for scratchpad + multi-monitor Omarchy setups)
+        self._apply_screenshot_editor_monitor()
+
+        # Center the screenshot on the monitor-sized canvas
+        if hasattr(self, "canvas_bounds_item"):
+            canvas_rect = self.canvas_bounds_item.rect()
+            img_rect = item.boundingRect()
+            x = (canvas_rect.width() - img_rect.width()) / 2
+            y = (canvas_rect.height() - img_rect.height()) / 2
+            item.setPos(max(0, x), max(0, y))
+
+        # Add to scene via the normal path (creates layer entry)
+        self.view.itemAdded.emit(item)   # will call add_item_to_canvas
+
+        # Also register in the Repository sidebar
+        self.add_artifact(filepath)
+
+        # Nice UX for editor workflow
+        self.view.fit_item(item) if hasattr(self.view, 'fit_item') else self.view.zoom_to_fit()
+        self.view.centerOn(item)
+
+        # Update title so user knows they are in "screenshot editing" mode
+        base = Path(filepath).name
+        self.setWindowTitle(f"CanvasForge — Editing {base}")
+
+        # === Omarchy Scratchpad Support ===
+        use_scratchpad = bool(self.settings.value("display/use_omarchy_scratchpad", False)) if self.settings else False
+        if use_scratchpad or screenshot_editor_mode:
+            # Hide the window so it goes into the scratchpad (user toggles with Super+S)
+            # The Hyprland window rule should have already moved it to special:canvasforge
+            self.hide()
+            self._status_bar.showMessage(
+                "Screenshot loaded into scratchpad. Press Super+S to show it.",
+                8000
+            )
+            self._screenshot_editor_mode = True
+
+            # In screenshot editor mode, hide the heavy side panels by default
+            # so the canvas gets maximum space (prevents "squished" feeling on monitor-sized canvases)
+            self._set_sidebars_visible(False)
+
+            # Give the canvas as much space as possible
+            QTimer.singleShot(100, self.view.zoom_to_fit)
+        else:
+            self._status_bar.showMessage(
+                "Screenshot loaded on monitor-sized canvas. Annotate, then use Ctrl+Shift+A → Clipboard (JPEG).",
+                6000
+            )
+
+        return True
+
+    def _apply_screenshot_editor_monitor(self):
+        """Apply the user's preferred monitor resolution for the screenshot editor canvas."""
+        mode = self.settings.value("display/screenshot_monitor_mode", "current") if self.settings else "current"
+
+        target_screen = None
+
+        if mode == "primary":
+            target_screen = QApplication.primaryScreen()
+        elif mode == "current":
+            target_screen = self.screen()
+        else:
+            # Specific monitor name (e.g. "HDMI-A-1" or "DP-1")
+            screens = QApplication.screens()
+            for screen in screens:
+                if screen.name() == mode or str(screen.serialNumber()) == mode:
+                    target_screen = screen
+                    break
+            if target_screen is None:
+                target_screen = self.screen()  # fallback
+
+        if not target_screen:
+            target_screen = self.screen() or QApplication.primaryScreen()
+
+        if not target_screen:
+            self._status_bar.showMessage("Could not determine target monitor", 3000)
+            return
+
+        # Calculate physical resolution
+        geometry = target_screen.geometry()
+        dpr = target_screen.devicePixelRatio()
+        w = int(geometry.width() * dpr)
+        h = int(geometry.height() * dpr)
+
+        if hasattr(self, "canvas_bounds_item"):
+            bounds = self.canvas_bounds_item
+            bounds.prepareGeometryChange()
+            bounds.setRect(0, 0, w, h)
+            bounds.update_handles()
+            if bounds.scene():
+                bounds.scene().setSceneRect(bounds.rect().adjusted(-2000, -2000, 2000, 2000))
+                bounds.scene().update()
+            bounds.finish_resize()
+
+        self.view.zoom_to_fit()
+
+    def set_canvas_to_current_monitor(self):
+        """Set the canvas bounds to exactly the physical resolution of the monitor
+        this CanvasForge window is currently on.
+
+        This correctly handles fractional scaling in Hyprland (e.g. scale 1.2 on your
+        1920x1080 and 1920x1200 monitors). grim captures at physical pixels, so we
+        must use geometry × devicePixelRatio instead of the logical size.
+        """
+        screen = self.screen()
+        if not screen:
+            self._status_bar.showMessage("Could not detect current monitor", 3000)
+            return False
+
+        # On Wayland with fractional scaling, screen.size() returns logical size.
+        # We need physical pixels to match grim/Omarchy screenshot captures.
+        geometry = screen.geometry()
+        dpr = screen.devicePixelRatio()
+        w = int(geometry.width() * dpr)
+        h = int(geometry.height() * dpr)
+
+        if w <= 64 or h <= 64:
+            self._status_bar.showMessage("Invalid monitor resolution detected", 3000)
+            return False
+
+        if hasattr(self, "canvas_bounds_item"):
+            bounds = self.canvas_bounds_item
+            bounds.prepareGeometryChange()
+            bounds.setRect(0, 0, w, h)
+            bounds.update_handles()
+            if bounds.scene():
+                bounds.scene().setSceneRect(bounds.rect().adjusted(-2000, -2000, 2000, 2000))
+                bounds.scene().update()
+            bounds.finish_resize()
+
+        self.view.zoom_to_fit()
+        self._status_bar.showMessage(f"Canvas set to monitor resolution: {w}×{h}", 4000)
+        return True
+
+    def _create_graphic_item_from_path(self, file_path: str):
+        """Create a RasterItem or VectorItem from a local image file path.
+        Returns the item (not yet added to any scene) or None on failure.
+        Reused by CLI screenshot loading, drop/paste, and File > Open.
+        """
+        lower = str(file_path).lower()
         if lower.endswith('.svg'):
             svg_bytes = None
             try:
                 svg_bytes = Path(file_path).read_bytes()
             except Exception:
                 svg_bytes = None
-
             renderer = QSvgRenderer(svg_bytes) if svg_bytes else QSvgRenderer(file_path)
-            if renderer.isValid():
-                item = VectorItem(renderer, svg_bytes=svg_bytes, source_path=file_path)
-                self.add_to_repository(item, thumbnail_source=file_path, display_name=display_name)
-            return
+            if not renderer.isValid():
+                return None
+            return VectorItem(renderer, svg_bytes=svg_bytes, source_path=file_path)
 
+        # Raster formats
         reader = QImageReader(file_path)
         if reader.canRead():
             pixmap = QPixmap(file_path)
-            item = RasterItem(pixmap)
+            if pixmap.isNull():
+                return None
+            return RasterItem(pixmap)
+
+        # Fallback: try as SVG anyway (some files have wrong extension)
+        renderer = QSvgRenderer(file_path)
+        if renderer.isValid():
+            return VectorItem(renderer, source_path=file_path)
+        return None
+
+    def add_artifact(self, file_path, display_name=None):
+        item = self._create_graphic_item_from_path(file_path)
+        if item is not None:
             self.add_to_repository(item, thumbnail_source=file_path, display_name=display_name)
-        else:
-            renderer = QSvgRenderer(file_path)
-            if renderer.isValid():
-                item = VectorItem(renderer, source_path=file_path)
-                self.add_to_repository(item, thumbnail_source=file_path, display_name=display_name)
 
     def add_to_repository(self, item, thumbnail_source=None, thumbnail_pixmap=None, display_name=None):
         list_item = QListWidgetItem()
@@ -6302,7 +6505,7 @@ class MainWindow(QMainWindow):
 
     def _notify_clipboard_image_path(self, image_path: Path, copied_value: str = "path"):
         if copied_value == "jpeg_base64":
-            message = f"JPEG image (for Grok TUI paste) + data URL copied to clipboard. File: {image_path}"
+            message = f"JPEG image copied to clipboard for Grok TUI (native image data). File saved: {image_path}"
         else:
             message = f"Image path copied to clipboard:\n{image_path}"
         self._status_bar.showMessage(message.replace("\n", " "), 7000)
@@ -6358,9 +6561,7 @@ class MainWindow(QMainWindow):
         if not as_base64:
             # Only advertise the local file path for the simple "path" target.
             # For the base64 JPEG target we intentionally omit this so Grok TUI
-            # (and similar tools) never see a local filesystem path in text/uri-list
-            # or as an image_url. They get either the raw image/jpeg bytes or the
-            # data:image/jpeg;base64,... string instead.
+            # (and similar tools) never see a local filesystem path in text/uri-list.
             mime_data.setUrls([QUrl.fromLocalFile(str(image_path))])
         if as_base64:
             jpeg_image = self._grok_clipboard_jpeg_image(image)
@@ -6374,7 +6575,13 @@ class MainWindow(QMainWindow):
             # image/jpeg is offered on the clipboard (no auto-generated image/png from
             # Qt). This makes Grok TUI (and similar native clipboard consumers) receive
             # the properly encoded JPEG when pasting images.
-            image_text = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
+            #
+            # We deliberately do NOT put the raw base64 data URL in the text clipboard
+            # anymore. Putting a huge base64 string caused Grok TUI to insert the
+            # placeholder "[image content will be provided separately]" instead of
+            # attaching the image properly. The binary JPEG data + short text is much
+            # more reliable for native Wayland clipboard image handling in Grok TUI.
+            image_text = f"[Image from CanvasForge: {image_path.name}]"
         else:
             png_bytes = self._encoded_image_bytes(image, "PNG")
             if png_bytes is None:
@@ -6792,7 +6999,42 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # Set consistent identity for Hyprland / Omarchy window rules and scratchpad
+    app.setApplicationName("CanvasForge")
+    app.setDesktopFileName("canvasforge")
+    
+    # Improve fractional scaling support on Wayland (Hyprland with scale 1.2, 1.5, etc.)
+    # This helps prevent blurry UI, wrong font sizes, and "things not looking correct"
+    # on monitors with non-integer scaling.
+    from PyQt6.QtCore import Qt
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+    
     apply_dark_theme(app)
     window = MainWindow()
     window.show()
+
+    # Parse CLI arguments
+    args = sys.argv[1:]
+    screenshot_editor_mode = "--screenshot-editor" in args or "--omarchy-editor" in args
+    
+    # Support being launched as a screenshot editor (e.g. OMARCHY_SCREENSHOT_EDITOR=canvasforge)
+    # or via "Open With" in file managers. The first argument can be an image path.
+    image_path = None
+    for arg in args:
+        if os.path.isfile(arg):
+            lower = arg.lower()
+            if lower.endswith(SUPPORTED_IMAGE_EXTENSIONS):
+                image_path = arg
+                break
+
+    if image_path:
+        # Delay slightly so the window and view are fully initialized
+        QTimer.singleShot(80, lambda p=image_path: window.load_screenshot_for_editing(p, screenshot_editor_mode=screenshot_editor_mode))
+    elif screenshot_editor_mode:
+        # Launched in editor mode without an image (rare, but supported for agents)
+        window._screenshot_editor_mode = True
+
     sys.exit(app.exec())

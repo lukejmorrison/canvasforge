@@ -2,10 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.7] - 2026-05-14
+
+### Changed
+- **Polished README & Omarchy Highlight**: Completely refreshed the project README with a professional header, prominent release badges, a strong Omarchy integration hero section, and clear scratchpad + multi-monitor setup instructions. The README now better showcases CanvasForge as the premier screenshot tool for Omarchy Arch Linux users.
+
 ## [0.6.0-beta.6] - 2026-05-14 18:40
 
+### Added
+- **Screenshot Editor enhancements for Omarchy power users:**
+  - New CLI flag `--screenshot-editor` (also `--omarchy-editor`) for reliable use by scripts and AI agents.
+  - New preference: **"Launch screenshot editor in Omarchy Scratchpad"** — when enabled, CanvasForge is hidden after loading the screenshot so it lives in your scratchpad (toggle with `Super + S`).
+  - Added rich help text in Preferences explaining the required Hyprland window rules and recommended "Open on Screen with Mouse" startup setting.
+  - Users can now force a specific monitor for canvas resolution in screenshot editor mode.
+- **Better fractional scaling support (HiDPI):** Added `QApplication.setHighDpiScaleFactorRoundingPolicy(PassThrough)` at startup. This significantly improves UI clarity, font sizes, and overall visibility on monitors with non-integer scaling (such as your scale 1.2 setups). The "can't see things correctly" issue on scaled displays should be greatly reduced.
+- **Screenshot Editor UX improvement:** When used as Omarchy screenshot editor (or with `--screenshot-editor`), side panels (Image Library + Layers) are now automatically hidden. This prevents the UI from feeling "squished" when the canvas is sized to full monitor resolution. You can still show them via the View menu or Library buttons if needed.
+
 ### Fixed
-- **Grok TUI local path rejection on image paste:** For the "Clipboard (base64 JPEG)" target we now completely omit `setUrls()` (and therefore the `file://` entry in text/uri-list). Previously the local save path was still being advertised on the clipboard, causing Grok TUI to sometimes pick a local filesystem path for the `image_url` field and get the "must be base64 or URL" 400 error. The target now only ever exposes the raw `image/jpeg` bytes + the `data:image/jpeg;base64,...` string — nothing local leaks onto the clipboard.
+- **Delete key for selected shapes/layers:** Restored the ability to press Delete or Backspace to delete selected items on the canvas. The keyboard handler was being bypassed when certain items (e.g. image layers with active SelectionOverlay) took keyboard focus. Now relies on the proper `QAction` shortcut (Delete + Backspace) registered on the toolbar/menu action, which works globally.
+- **Grok TUI "weird data blob" / placeholder text on Send to Agent:** The "Clipboard (base64 JPEG)" target no longer puts the raw (very long) `data:image/jpeg;base64,...` string into the text clipboard. Putting the full base64 caused Grok TUI to insert the placeholder "[image content will be provided separately]" instead of properly attaching the image. It now only provides native `image/jpeg` binary data + a short descriptive text. This makes pasting from CanvasForge → Grok TUI work cleanly.
+- **Grok TUI local path rejection on image paste:** For the "Clipboard (base64 JPEG)" target we now completely omit `setUrls()` (and therefore the `file://` entry in text/uri-list). Previously the local save path was still being advertised on the clipboard, causing Grok TUI to sometimes pick a local filesystem path for the `image_url` field and get the "must be base64 or URL" 400 error. The target now only ever exposes the raw `image/jpeg` bytes.
 - **Grok TUI JPEG clipboard paste (follow-up):** The removal of `setImageData()` from beta.5 is kept so only JPEG (never a PNG fallback) is offered for the binary image part.
 
 ## [0.6.0-beta.5] - 2026-05-14 18:19
