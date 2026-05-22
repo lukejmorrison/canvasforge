@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.8] - 2026-05-22
+
+### Added
+- **Colour Picker tool:** Added a toolbar picker with a canvas-click eyedropper, optional Alt-click Omarchy `hyprpicker`, stored fill colour between launches, and a compact preview with a live hex badge.
+- **Fill tool:** Added a Photoshop-style bucket/fill workflow with undoable tolerance-based raster flood fill, transparent fill support, custom swatches, and toolbar cursor feedback.
+- **Tool details panel:** Added a right-sidebar Details panel above Repository with the selected toolbar tool name and a Fill colour selector pallet.
+
+### Fixed
+- **Selection tool context menu:** Right-clicking an active yellow raster selection now opens the shared context menu immediately, with the extraction action labeled **Cut Out Selection**.
+- **Context menu robustness:** Hardened paste-action detection so the shared menu still opens when the clipboard has no MIME payload.
+- **Fill transparent regions:** Filling a region that was previously made transparent now finds the raster layer by full pixmap bounds, so Eyedropper + Fill can recolour transparent areas.
+- **Eyedropper flow:** Double-clicking while the picker is active samples colour instead of creating text, and picker preview chrome is hidden reliably when switching tools.
+
 ## [0.6.0-beta.7] - 2026-05-14
 
 ### Changed
@@ -224,6 +237,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 - Track new tooling such as stretch handles, fill/eyedropper workflows, Mojo experiments, SVG morphing, and future export options.
+
+## [2026-05-17 15:51] Clipboard image copy for canvas items
+
+- **Added:** Right-click **Copy** and `Ctrl+C` now render the selected canvas item or selected item group to the system clipboard as PNG image data, so it can be pasted into chat or other apps.
+- **Updated:** The previous clone-on-canvas behavior is now labeled **Duplicate Item(s)** and is available from the context menu and `Ctrl+D`.
 
 ## [2025-12-05 09:00] Branded desktop icon & installer
 

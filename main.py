@@ -25,10 +25,10 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QDialog, QDialogButtonBox, QTabWidget, QFormLayout, QLineEdit,
              QPushButton, QHBoxLayout, QGroupBox, QFrame, QComboBox, QCheckBox,
              QToolButton, QTableWidget, QTableWidgetItem, QHeaderView, QInputDialog,
-             QMessageBox, QGraphicsBlurEffect, QSlider)
+             QMessageBox, QGraphicsBlurEffect, QSlider, QScrollArea, QButtonGroup)
 import shutil
 
-__version__ = "0.6.0-beta.7"
+__version__ = "0.6.0-beta.8"
 CLIPBOARD_JPEG_MAX_SIDE = 1440
 CLIPBOARD_JPEG_QUALITY = 88
 
@@ -40,13 +40,13 @@ from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
 from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QPainter, QIcon, QPen, QColor, QBrush,
                      QFont, QTransform, QClipboard, QImage, QKeySequence, QTextCursor, QPalette,
-                     QFontMetrics, QPainterPath, QPolygonF)
+                     QFontMetrics, QPainterPath, QPolygonF, QCursor)
 from PyQt6.QtCore import (Qt, QTimer, QPointF, QPoint, pyqtSignal, QRectF, QSize, QSettings, 
                           QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl)
 from pathlib import Path
 import datetime
 from image_library_panel import ImageLibraryPanel
-from undo_manager import UndoManager, CallbackAction
+from undo_manager import UndoManager, CallbackAction, ImageEditAction
 from plugin_manager import PluginManager
 
 
@@ -66,6 +66,8 @@ class ToolType(Enum):
     BLUR = auto()
     BORDER = auto()
     HIGHLIGHT = auto()
+    COLOUR_PICKER = auto()
+    FILL = auto()
 
 
 class FillMode(Enum):
@@ -1819,6 +1821,99 @@ class SelectionMagnifier(QWidget):
         painter.end()
 
 
+class ColourPickerMagnifier(QWidget):
+    def __init__(self, view):
+        super().__init__(view.viewport())
+        self.view = view
+        self._view_pos = QPoint()
+        self._scene_pos = QPointF()
+        self._color = QColor("#000000")
+        self._preview_width = 220
+        self._preview_height = 104
+        self._source_radius = 20
+        self.setFixedSize(self._preview_width, self._preview_height)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.hide()
+
+    def show_at(self, view_pos, scene_pos, color):
+        self._view_pos = QPoint(view_pos)
+        self._scene_pos = QPointF(scene_pos)
+        self._color = QColor(color) if color and color.isValid() else QColor("#000000")
+        margin = 20
+        x = view_pos.x() + margin
+        y = view_pos.y() - self.height() - margin
+        parent = self.parentWidget()
+        if parent:
+            if x + self.width() > parent.width():
+                x = view_pos.x() - self.width() - margin
+            if y < 0:
+                y = view_pos.y() + margin
+            x = max(0, min(x, parent.width() - self.width()))
+            y = max(0, min(y, parent.height() - self.height()))
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        outer = QRectF(2, 2, self.width() - 4, self.height() - 4)
+        path = QPainterPath()
+        path.addRoundedRect(outer, 4, 4)
+        painter.setClipPath(path)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        source = QRectF(
+            self._scene_pos.x() - self._source_radius,
+            self._scene_pos.y() - self._source_radius,
+            self._source_radius * 2,
+            self._source_radius * 2,
+        )
+        self.view.scene().render(painter, outer, source)
+        painter.setClipping(False)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(QColor("#1f2937"), 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(outer, 4, 4)
+
+        self._draw_eyedropper_glyph(painter, outer.center() + QPointF(-18, -22), 1.0)
+
+        label = self._color.name().upper()
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(13)
+        painter.setFont(font)
+        metrics = QFontMetrics(font)
+        label_w = metrics.horizontalAdvance(label) + 34
+        label_rect = QRectF(outer.right() - label_w - 12, outer.bottom() - 42, label_w, 32)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(17, 24, 39, 235)))
+        painter.drawRoundedRect(label_rect, 7, 7)
+        painter.setPen(QPen(self._color, 5))
+        painter.drawLine(
+            QPointF(label_rect.left() + 12, label_rect.center().y()),
+            QPointF(label_rect.left() + 18, label_rect.center().y()),
+        )
+        painter.setPen(QColor("#ffffff"))
+        painter.drawText(label_rect.adjusted(20, 0, -6, 0), Qt.AlignmentFlag.AlignCenter, label)
+        painter.end()
+
+    def _draw_eyedropper_glyph(self, painter, center, scale=1.0):
+        painter.save()
+        painter.translate(center)
+        painter.rotate(-42)
+        painter.scale(scale, scale)
+        painter.setPen(QPen(QColor("#050505"), 7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(-19, 0), QPointF(16, 0))
+        painter.setPen(QPen(QColor("#f8fafc"), 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(-19, 0), QPointF(16, 0))
+        painter.setPen(QPen(QColor("#050505"), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(0, -9), QPointF(0, 10))
+        painter.setPen(QPen(QColor("#050505"), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(-23, 0), QPointF(-32, 10))
+        painter.restore()
+
+
 class RasterItem(ContextMenuForwarder, QGraphicsPixmapItem):
     def __init__(self, pixmap):
         pixmap = self._ensure_argb_pixmap(pixmap)
@@ -2490,6 +2585,7 @@ class CanvasView(QGraphicsView):
         self._cutout_add_space = False
         self._pending_text_edit_item = None
         self._selection_magnifier = SelectionMagnifier(self)
+        self._colour_picker_magnifier = ColourPickerMagnifier(self)
         self._pixel_grid_enabled = self.main_window.settings.value(
             "view/pixel_grid", False, type=bool
         )
@@ -2609,6 +2705,7 @@ class CanvasView(QGraphicsView):
         # Don't strand an in-progress drag when the user clicks another tool.
         self._abort_drag_preview()
         self._selection_magnifier.hide()
+        self._colour_picker_magnifier.hide()
         if self.current_tool == ToolType.SELECTION and tool != ToolType.SELECTION:
             self._cancel_selection_mode()
         if self.current_tool == ToolType.CUTOUT and tool != ToolType.CUTOUT:
@@ -2620,6 +2717,17 @@ class CanvasView(QGraphicsView):
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
         if tool == ToolType.CUTOUT:
             self._show_cutout_status()
+        elif tool == ToolType.COLOUR_PICKER:
+            self.main_window._status_bar.showMessage(
+                "Eyedropper: hover to preview, click to sample a colour for Fill",
+                6000,
+            )
+        elif tool == ToolType.FILL:
+            self.main_window._status_bar.showMessage(
+                f"Fill: click inside a raster image area to fill with {self.main_window.fill_color_label()}",
+                6000,
+            )
+        self.main_window.update_tool_details(tool)
         self._apply_cursor()
 
     def set_cutout_add_mode(self, enabled: bool):
@@ -2865,13 +2973,28 @@ class CanvasView(QGraphicsView):
             super().mousePressEvent(event)
             return
 
+        scene_pos = self.mapToScene(event.pos())
+        clicked_item = self.itemAt(event.pos())
+
+        if event.button() == Qt.MouseButton.RightButton:
+            self._selection_magnifier.hide()
+            self._colour_picker_magnifier.hide()
+            global_pos = (
+                event.globalPosition()
+                if hasattr(event, "globalPosition")
+                else event.globalPos()
+            )
+            clicked_items = [clicked_item] if clicked_item else None
+            if self._show_context_menu(global_pos, scene_pos, clicked_items=clicked_items):
+                event.accept()
+                return
+            super().mousePressEvent(event)
+            return
+
         # Delegate to active plugin tool first
         if self._active_plugin_tool and hasattr(self._active_plugin_tool, '_on_view_mouse_press'):
             if self._active_plugin_tool._on_view_mouse_press(event):
                 return
-
-        scene_pos = self.mapToScene(event.pos())
-        clicked_item = self.itemAt(event.pos())
 
         if isinstance(clicked_item, (ResizeHandle, RotateHandle, CanvasResizeHandle)):
             super().mousePressEvent(event)
@@ -2882,6 +3005,12 @@ class CanvasView(QGraphicsView):
             return
         if self.current_tool == ToolType.CUTOUT:
             self._handle_cutout_press(event, scene_pos)
+            return
+        if self.current_tool == ToolType.COLOUR_PICKER:
+            self._handle_colour_picker_press(event, scene_pos, clicked_item)
+            return
+        if self.current_tool == ToolType.FILL:
+            self._handle_fill_press(event, scene_pos, clicked_item)
             return
         if self.current_tool == ToolType.SELECT and event.button() == Qt.MouseButton.LeftButton:
             if self._handle_object_select_press(event, clicked_item):
@@ -2984,6 +3113,17 @@ class CanvasView(QGraphicsView):
                 self._update_cutout_preview(scene_pos, event.modifiers())
                 return
             super().mouseMoveEvent(event)
+            return
+        if self.current_tool == ToolType.COLOUR_PICKER:
+            color = self._sample_color_at(scene_pos, self.itemAt(event.pos()))
+            if color and color.isValid():
+                self._colour_picker_magnifier.show_at(event.pos(), scene_pos, color)
+                self.main_window._status_bar.showMessage(
+                    f"Eyedropper: {color.name()}",
+                    1000,
+                )
+            else:
+                self._colour_picker_magnifier.hide()
             return
 
         if self._drawing_item:
@@ -3480,7 +3620,7 @@ class CanvasView(QGraphicsView):
             not self._selection_creating
         )
         if overlay_active:
-            grab_action = QAction("Grab Selection", self)
+            grab_action = QAction("Cut Out Selection", self)
             grab_action.triggered.connect(lambda: self._finalize_selection(None))
             menu.addAction(grab_action)
             copy_action = QAction("Copy Selection", self)
@@ -3508,10 +3648,15 @@ class CanvasView(QGraphicsView):
         if selected_layer_items:
             if actions_present:
                 menu.addSeparator()
-            copy_label = "Copy Item" if len(selected_layer_items) == 1 else "Copy Items"
-            copy_items_action = QAction(copy_label, self)
+            copy_items_action = QAction("Copy", self)
+            copy_items_action.setShortcut(QKeySequence.StandardKey.Copy)
             copy_items_action.triggered.connect(self._copy_selection_or_items)
             menu.addAction(copy_items_action)
+            duplicate_label = "Duplicate Item" if len(selected_layer_items) == 1 else "Duplicate Items"
+            duplicate_action = QAction(duplicate_label, self)
+            duplicate_action.setShortcut(QKeySequence("Ctrl+D"))
+            duplicate_action.triggered.connect(self._duplicate_selection_or_items)
+            menu.addAction(duplicate_action)
             delete_action = QAction("Delete Selection", self)
             delete_action.triggered.connect(self.main_window.delete_selected_items)
             menu.addAction(delete_action)
@@ -3562,12 +3707,14 @@ class CanvasView(QGraphicsView):
             actions_present = True
 
         clipboard = QApplication.clipboard()
-        mime_data = clipboard.mimeData()
-        can_paste = (
-            mime_data.hasText() or
-            mime_data.hasImage() or
-            mime_data.hasFormat('image/svg+xml') or
-            mime_data.hasUrls()
+        mime_data = clipboard.mimeData() if clipboard else None
+        can_paste = bool(
+            mime_data and (
+                mime_data.hasText() or
+                mime_data.hasImage() or
+                mime_data.hasFormat('image/svg+xml') or
+                mime_data.hasUrls()
+            )
         )
         if can_paste:
             if actions_present:
@@ -3697,6 +3844,14 @@ class CanvasView(QGraphicsView):
         return True
 
     def mouseDoubleClickEvent(self, event):
+        scene_pos = self.mapToScene(event.pos())
+        clicked_item = self.itemAt(event.pos())
+        if self.current_tool == ToolType.COLOUR_PICKER:
+            self._handle_colour_picker_press(event, scene_pos, clicked_item)
+            return
+        if self.current_tool == ToolType.FILL:
+            self._handle_fill_press(event, scene_pos, clicked_item)
+            return
         if (self.current_tool == ToolType.SELECTION and
                 event.button() == Qt.MouseButton.LeftButton and
                 self._selection_host and
@@ -3724,8 +3879,14 @@ class CanvasView(QGraphicsView):
             if self._drawing_item is not None:
                 self._abort_drag_preview()
                 return
-        if event.key() == Qt.Key.Key_C:
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.main_window.delete_selected_items()
+            return
+        if event.matches(QKeySequence.StandardKey.Copy):
             if self._copy_selection_or_items():
+                return
+        if event.key() == Qt.Key.Key_D and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if self._duplicate_selection_or_items():
                 return
         if self.current_tool == ToolType.SELECTION and event.key() in (Qt.Key.Key_G, Qt.Key.Key_Return):
             self._finalize_selection(None)
@@ -3798,6 +3959,158 @@ class CanvasView(QGraphicsView):
         event.ignore()
         self._apply_cursor()
 
+    def _handle_colour_picker_press(self, event, scene_pos, clicked_item):
+        if event.button() != Qt.MouseButton.LeftButton:
+            event.ignore()
+            return
+        color = self._sample_color_at(scene_pos, clicked_item)
+        if color and color.isValid():
+            self.main_window.set_fill_color(color, "canvas")
+            self._colour_picker_magnifier.show_at(event.pos(), scene_pos, color)
+            event.accept()
+            return
+        self.main_window._status_bar.showMessage("Eyedropper: no visible colour under cursor", 3000)
+        event.accept()
+
+    def _handle_fill_press(self, event, scene_pos, clicked_item):
+        if event.button() != Qt.MouseButton.LeftButton:
+            event.ignore()
+            return
+        item = self._raster_item_at_scene_pos(scene_pos, clicked_item)
+        if not item:
+            self.main_window._status_bar.showMessage("Fill: click inside a raster image layer", 3000)
+            event.accept()
+            return
+        local_pos = item.mapFromScene(scene_pos)
+        x = int(math.floor(local_pos.x()))
+        y = int(math.floor(local_pos.y()))
+        pixmap = item.pixmap()
+        if x < 0 or y < 0 or x >= pixmap.width() or y >= pixmap.height():
+            self.main_window._status_bar.showMessage("Fill: click inside the image bounds", 3000)
+            event.accept()
+            return
+
+        old_pixmap = pixmap.copy()
+        tolerance = int(self.main_window.settings.value("tools/fill_tolerance", 32))
+        new_pixmap, changed = self._flood_fill_pixmap(
+            old_pixmap,
+            x,
+            y,
+            self.main_window.current_fill_color,
+            tolerance,
+        )
+        if not new_pixmap or changed < 1:
+            self.main_window._status_bar.showMessage("Fill: area already matches the selected colour", 3000)
+            event.accept()
+            return
+
+        item.applyPixmapEdit(new_pixmap)
+        self.main_window.undo_manager.push(
+            ImageEditAction(item, old_pixmap, new_pixmap.copy(), "Fill Image Area")
+        )
+        self.main_window._status_bar.showMessage(
+            f"Filled {changed:,} pixels with {self.main_window.fill_color_label()}",
+            4000,
+        )
+        event.accept()
+
+    def _raster_item_at_scene_pos(self, scene_pos, clicked_item=None):
+        layer_items_ordered = [
+            item for item in self.main_window.layer_list.graphics_items()
+            if item and not sip.isdeleted(item) and item.scene() is self.scene()
+        ]
+        layer_items = set(layer_items_ordered)
+        candidates = []
+        if clicked_item:
+            target = self._layer_item_from_hit(clicked_item, layer_items)
+            if target:
+                candidates.append(target)
+        candidates.extend(self.scene().items(scene_pos))
+        candidates.extend(sorted(layer_items_ordered, key=lambda item: item.zValue(), reverse=True))
+
+        seen = set()
+        for candidate in candidates:
+            target = self._layer_item_from_hit(candidate, layer_items)
+            if not isinstance(target, RasterItem) or target in seen:
+                continue
+            seen.add(target)
+            local = target.mapFromScene(scene_pos)
+            pix = target.pixmap()
+            if 0 <= local.x() < pix.width() and 0 <= local.y() < pix.height():
+                return target
+        return None
+
+    def _sample_color_at(self, scene_pos, clicked_item=None):
+        item = self._raster_item_at_scene_pos(scene_pos, clicked_item)
+        if item:
+            local = item.mapFromScene(scene_pos)
+            x = int(math.floor(local.x()))
+            y = int(math.floor(local.y()))
+            return item.pixmap().toImage().pixelColor(x, y)
+
+        image = QImage(1, 1, QImage.Format.Format_ARGB32)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        self.scene().render(
+            painter,
+            QRectF(0, 0, 1, 1),
+            QRectF(scene_pos.x(), scene_pos.y(), 1, 1),
+        )
+        painter.end()
+        color = image.pixelColor(0, 0)
+        return color if color.alpha() > 0 else None
+
+    @staticmethod
+    def _flood_fill_pixmap(pixmap: QPixmap, x: int, y: int, fill_color: QColor, tolerance: int):
+        image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        width = image.width()
+        height = image.height()
+        if x < 0 or y < 0 or x >= width or y >= height:
+            return None, 0
+
+        seed = image.pixelColor(x, y)
+        replacement = QColor(fill_color)
+        if not replacement.isValid():
+            return None, 0
+        tolerance = max(0, min(255, int(tolerance)))
+
+        def matches_seed(color):
+            if seed.alpha() <= tolerance:
+                return color.alpha() <= tolerance
+            return (
+                abs(color.alpha() - seed.alpha()) <= tolerance and
+                abs(color.red() - seed.red()) <= tolerance and
+                abs(color.green() - seed.green()) <= tolerance and
+                abs(color.blue() - seed.blue()) <= tolerance
+            )
+
+        stack = [(x, y)]
+        visited = bytearray(width * height)
+        changed = 0
+        while stack:
+            px, py = stack.pop()
+            if px < 0 or py < 0 or px >= width or py >= height:
+                continue
+            idx = py * width + px
+            if visited[idx]:
+                continue
+            visited[idx] = 1
+            current = image.pixelColor(px, py)
+            if not matches_seed(current):
+                continue
+            next_color = QColor(replacement)
+            if current.alpha() > 0 and replacement.alpha() == 255:
+                next_color.setAlpha(current.alpha())
+            if current.rgba() != next_color.rgba():
+                image.setPixelColor(px, py, next_color)
+                changed += 1
+            stack.append((px + 1, py))
+            stack.append((px - 1, py))
+            stack.append((px, py + 1))
+            stack.append((px, py - 1))
+
+        return QPixmap.fromImage(image), changed
+
     def _is_overlay_related_item(self, item, overlay):
         if not overlay or not item:
             return False
@@ -3828,12 +4141,19 @@ class CanvasView(QGraphicsView):
 
     def leaveEvent(self, event):
         self._selection_magnifier.hide()
+        self._colour_picker_magnifier.hide()
         super().leaveEvent(event)
 
     def _copy_selection(self):
         if not self._selection_host or not self._selection_host.hasSelectionOverlay():
             return
-        self._finalize_selection(None, remove_original=False)
+        local_rect, _ = self._selection_host._selection_rects()
+        if not local_rect:
+            self.main_window._status_bar.showMessage("Selection could not be copied", 4000)
+            return
+        image = self._selection_host.pixmap().toImage().copy(local_rect.toAlignedRect())
+        image = image.convertToFormat(QImage.Format.Format_ARGB32)
+        self.main_window.copy_image_to_clipboard(image, "Selection")
 
     def _copy_selection_or_items(self):
         overlay_active = (
@@ -3844,6 +4164,18 @@ class CanvasView(QGraphicsView):
         )
         if overlay_active:
             self._copy_selection()
+            return True
+        return self.main_window.copy_selected_items_to_clipboard()
+
+    def _duplicate_selection_or_items(self):
+        overlay_active = (
+            self.current_tool == ToolType.SELECTION and
+            self._selection_host and
+            self._selection_host.hasSelectionOverlay() and
+            not self._selection_creating
+        )
+        if overlay_active:
+            self._finalize_selection(None, remove_original=False)
             return True
         layer_items = set(self.main_window.layer_list.graphics_items())
         selected_items = [
@@ -3961,10 +4293,77 @@ class CanvasView(QGraphicsView):
                 self.setCursor(Qt.CursorShape.ArrowCursor)
         elif self.current_tool == ToolType.CUTOUT:
             self.setCursor(Qt.CursorShape.CrossCursor)
+        elif self.current_tool == ToolType.COLOUR_PICKER:
+            self.setCursor(self._eyedropper_cursor())
+        elif self.current_tool == ToolType.FILL:
+            self.setCursor(self._fill_colour_cursor())
         elif self.current_tool == ToolType.SELECT:
             self.setCursor(Qt.CursorShape.ArrowCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def _eyedropper_cursor(self):
+        if hasattr(self, "_cached_eyedropper_cursor"):
+            return self._cached_eyedropper_cursor
+        pixmap = self._render_eyedropper_cursor()
+        self._cached_eyedropper_cursor = QCursor(pixmap, 4, 28)
+        return self._cached_eyedropper_cursor
+
+    def _fill_colour_cursor(self):
+        if hasattr(self, "_cached_fill_cursor"):
+            return self._cached_fill_cursor
+        color = QColor(self.main_window.current_fill_color)
+        pixmap = self._render_eyedropper_cursor(color)
+        self._cached_fill_cursor = QCursor(pixmap, 4, 28)
+        return self._cached_fill_cursor
+
+    def _render_eyedropper_cursor(self, color: QColor | None = None):
+        is_fill_cursor = color is not None
+        color = QColor(color) if color is not None else QColor("#4b5563")
+        if not color.isValid():
+            color = QColor("#4b5563")
+
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        tip = QPointF(4, 28)
+        barrel_start = QPointF(10, 22)
+        barrel_end = QPointF(24, 8)
+        painter.setPen(QPen(QColor("#111827"), 7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(barrel_start, barrel_end)
+        barrel_color = color if is_fill_cursor and color.alpha() > 0 else QColor("#f8fafc")
+        painter.setPen(QPen(barrel_color, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(barrel_start, barrel_end)
+        painter.setPen(QPen(QColor("#111827"), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(18, 6), QPointF(28, 16))
+        painter.setPen(QPen(QColor("#111827"), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(barrel_start, tip)
+
+        if is_fill_cursor:
+            swatch_rect = QRectF(20, 20, 10, 10)
+            tile = 5
+            for y in range(20, 30, tile):
+                for x in range(20, 30, tile):
+                    shade = QColor("#ffffff") if ((x // tile) + (y // tile)) % 2 == 0 else QColor("#cbd5e1")
+                    painter.fillRect(QRectF(x, y, tile, tile).intersected(swatch_rect), shade)
+            if color.alpha() > 0:
+                painter.fillRect(swatch_rect, color)
+            painter.setPen(QPen(QColor("#111827"), 1))
+            painter.drawRect(swatch_rect.adjusted(0, 0, -1, -1))
+            if color.alpha() == 0:
+                painter.setPen(QPen(QColor("#ef4444"), 2))
+                painter.drawLine(QPointF(21, 29), QPointF(29, 21))
+
+        painter.end()
+        return pixmap
+
+    def invalidate_fill_cursor(self):
+        if hasattr(self, "_cached_fill_cursor"):
+            del self._cached_fill_cursor
+        if self.current_tool == ToolType.FILL:
+            self._apply_cursor()
 
     def _is_text_editing_active(self):
         focus_item = self.scene().focusItem()
@@ -4141,6 +4540,11 @@ class PreferencesDialog(QDialog):
     
     def _create_canvas_tab(self):
         """Create the Canvas settings tab."""
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(20)
@@ -4293,8 +4697,11 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(screenshot_group)
         layout.addStretch()
-        
-        return widget
+
+        widget.setMinimumHeight(layout.sizeHint().height())
+        scroll_area.setWidget(widget)
+
+        return scroll_area
     
     def _create_appearance_tab(self):
         """Create Appearance settings tab."""
@@ -5364,6 +5771,9 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(app_icon_path)))
         self.fill_mode = FillMode.TRANSPARENT
         self.settings = QSettings("CanvasForge", "CanvasForge")
+        self.current_fill_color = QColor(str(self.settings.value("tools/fill_color", "#f6c21a")))
+        if not self.current_fill_color.isValid():
+            self.current_fill_color = QColor("#f6c21a")
         self._shrink_to_fit_enabled = self.settings.value(
             "view/shrink_to_fit", True, type=bool
         )
@@ -5401,6 +5811,8 @@ class MainWindow(QMainWindow):
 
         self.right_panel = QWidget()
         right_layout = QVBoxLayout(self.right_panel)
+        right_layout.setSpacing(8)
+        self._setup_details_panel(right_layout)
         right_layout.addWidget(QLabel("Repository"))
         right_layout.addWidget(self.artifact_list)
         right_layout.addWidget(QLabel("Layers"))
@@ -5422,6 +5834,7 @@ class MainWindow(QMainWindow):
         self._restore_splitter_sizes()
         sidebars_visible = self.settings.value("view/sidebars_visible", True, type=bool)
         self._set_sidebars_visible(sidebars_visible, persist=False)
+        self.update_tool_details(self.view.current_tool)
         
         # Initialize Plugin Manager (after layer_list is created)
         self.plugin_manager = PluginManager(self, self.undo_manager)
@@ -5493,6 +5906,14 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(self.redo_action)
         
         edit_menu.addSeparator()
+        copy_action = QAction("Copy", self)
+        copy_action.setShortcut(QKeySequence.StandardKey.Copy)
+        copy_action.triggered.connect(lambda: self.copy_selected_items_to_clipboard())
+        edit_menu.addAction(copy_action)
+        duplicate_action = QAction("Duplicate", self)
+        duplicate_action.setShortcut(QKeySequence("Ctrl+D"))
+        duplicate_action.triggered.connect(self.view._duplicate_selection_or_items)
+        edit_menu.addAction(duplicate_action)
         edit_menu.addAction(delete_action)
         select_all_action = QAction("Select All Canvas Items", self)
         select_all_action.setShortcut(QKeySequence.StandardKey.SelectAll)
@@ -5665,9 +6086,251 @@ class MainWindow(QMainWindow):
         self.library_panel.refresh()
         self.library_panel.list_view_widget().setFocus()
 
+    def _setup_details_panel(self, parent_layout):
+        self.details_panel = QFrame()
+        self.details_panel.setObjectName("toolDetailsPanel")
+        self.details_panel.setFrameShape(QFrame.Shape.StyledPanel)
+        self.details_panel.setStyleSheet("""
+            QFrame#toolDetailsPanel {
+                background-color: #2f2f2f;
+                border: 1px solid #565656;
+                border-radius: 4px;
+            }
+            QLabel#toolDetailsTitle {
+                color: #f2f2f2;
+                font-weight: 600;
+            }
+            QLabel#toolDetailsHint {
+                color: #b8b8b8;
+                font-size: 11px;
+            }
+            QToolButton {
+                border: 1px solid #555;
+                border-radius: 3px;
+                background: #3a3a3a;
+                padding: 2px;
+            }
+            QToolButton:checked {
+                border: 2px solid #f6c21a;
+                background: #454545;
+            }
+            QPushButton {
+                padding: 3px 8px;
+            }
+        """)
+        layout = QVBoxLayout(self.details_panel)
+        layout.setContentsMargins(8, 7, 8, 8)
+        layout.setSpacing(6)
+
+        self.tool_details_title = QLabel()
+        self.tool_details_title.setObjectName("toolDetailsTitle")
+        self.tool_details_title.setWordWrap(True)
+        layout.addWidget(self.tool_details_title)
+
+        current_row = QHBoxLayout()
+        current_row.setContentsMargins(0, 0, 0, 0)
+        current_row.setSpacing(8)
+        current_row.addWidget(QLabel("Fill:"))
+        self.fill_colour_preview = QLabel()
+        self.fill_colour_preview.setFixedSize(30, 22)
+        current_row.addWidget(self.fill_colour_preview)
+        self.fill_colour_label = QLabel()
+        self.fill_colour_label.setObjectName("toolDetailsHint")
+        current_row.addWidget(self.fill_colour_label, 1)
+        layout.addLayout(current_row)
+
+        self._fill_swatch_buttons = []
+        self._fill_swatch_group = QButtonGroup(self)
+        self._fill_swatch_group.setExclusive(True)
+        palette = [
+            ("Black", QColor("#000000")),
+            ("White", QColor("#ffffff")),
+            ("Red", QColor("#ef4444")),
+            ("Orange", QColor("#f97316")),
+            ("Yellow", QColor("#f6c21a")),
+            ("Green", QColor("#22c55e")),
+            ("Blue", QColor("#3b82f6")),
+            ("Purple", QColor("#7c3aed")),
+            ("Pink", QColor("#ec4899")),
+            ("Cyan", QColor("#06b6d4")),
+            ("Gray", QColor("#6b7280")),
+            ("Transparent", QColor(0, 0, 0, 0)),
+        ]
+        for start in range(0, len(palette), 6):
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(4)
+            for label, color in palette[start:start + 6]:
+                btn = QToolButton()
+                btn.setCheckable(True)
+                btn.setToolTip(label)
+                btn.setAccessibleName(label)
+                btn.setFixedSize(28, 28)
+                btn.setIcon(self._colour_swatch_icon(color, QSize(20, 20)))
+                btn.setIconSize(QSize(20, 20))
+                btn.clicked.connect(
+                    lambda _checked=False, c=QColor(color), n=label: self.set_fill_color(c, n)
+                )
+                self._fill_swatch_group.addButton(btn)
+                self._fill_swatch_buttons.append((btn, QColor(color)))
+                row.addWidget(btn)
+            row.addStretch()
+            layout.addLayout(row)
+
+        custom_row = QHBoxLayout()
+        custom_row.setContentsMargins(0, 0, 0, 0)
+        custom_row.addStretch()
+        custom_btn = QPushButton("Custom...")
+        custom_btn.clicked.connect(self._choose_fill_colour)
+        custom_row.addWidget(custom_btn)
+        layout.addLayout(custom_row)
+
+        parent_layout.addWidget(self.details_panel, 0)
+        self._refresh_fill_palette()
+
+    def _tool_display_name(self, tool):
+        return {
+            ToolType.SELECT: "Pointer",
+            ToolType.MOVE: "Move",
+            ToolType.ROTATE: "Rotate",
+            ToolType.SCALE: "Scale",
+            ToolType.RECTANGLE: "Rectangle",
+            ToolType.ELLIPSE: "Ellipse",
+            ToolType.TEXT: "Text",
+            ToolType.ALIGN_GRID: "Snap Grid",
+            ToolType.SELECTION: "Selection",
+            ToolType.CUTOUT: "Cutout",
+            ToolType.ARROW: "Arrow",
+            ToolType.STEP: "Step",
+            ToolType.BLUR: "Blur",
+            ToolType.BORDER: "Border",
+            ToolType.HIGHLIGHT: "Highlight",
+            ToolType.COLOUR_PICKER: "Eyedropper",
+            ToolType.FILL: "Fill",
+        }.get(tool, "Tool")
+
+    def update_tool_details(self, tool):
+        if hasattr(self, "tool_details_title"):
+            self.tool_details_title.setText(
+                f"Details - {self._tool_display_name(tool)} Tool - Colour Selector Pallet"
+            )
+        self._refresh_fill_palette()
+
+    def _choose_fill_colour(self):
+        from PyQt6.QtWidgets import QColorDialog
+        chosen = QColorDialog.getColor(
+            self.current_fill_color,
+            self,
+            "Fill Colour",
+            QColorDialog.ColorDialogOption.ShowAlphaChannel,
+        )
+        if chosen.isValid():
+            self.set_fill_color(chosen, "custom palette")
+
+    def _colour_swatch_icon(self, color, size):
+        pixmap = QPixmap(size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        rect = QRectF(0, 0, size.width(), size.height())
+        tile = 5
+        for y in range(0, size.height(), tile):
+            for x in range(0, size.width(), tile):
+                shade = QColor("#f8fafc") if ((x // tile) + (y // tile)) % 2 == 0 else QColor("#cbd5e1")
+                painter.fillRect(QRectF(x, y, tile, tile).intersected(rect), shade)
+        if color.alpha() > 0:
+            painter.fillRect(rect, color)
+        painter.setPen(QPen(QColor("#111827"), 1))
+        painter.drawRect(rect.adjusted(0, 0, -1, -1))
+        if color.alpha() == 0:
+            painter.setPen(QPen(QColor("#ef4444"), 2))
+            painter.drawLine(QPointF(3, size.height() - 4), QPointF(size.width() - 4, 3))
+        painter.end()
+        return QIcon(pixmap)
+
+    def _refresh_fill_palette(self):
+        if not hasattr(self, "fill_colour_preview"):
+            return
+        icon = self._colour_swatch_icon(self.current_fill_color, QSize(30, 22))
+        self.fill_colour_preview.setPixmap(icon.pixmap(30, 22))
+        self.fill_colour_label.setText(self.fill_color_label())
+        current_rgba = self.current_fill_color.rgba()
+        matched = False
+        for btn, color in getattr(self, "_fill_swatch_buttons", []):
+            is_match = color.rgba() == current_rgba
+            btn.blockSignals(True)
+            btn.setChecked(is_match)
+            btn.blockSignals(False)
+            matched = matched or is_match
+        if not matched and hasattr(self, "_fill_swatch_group"):
+            self._fill_swatch_group.setExclusive(False)
+            for btn, _color in self._fill_swatch_buttons:
+                btn.setChecked(False)
+            self._fill_swatch_group.setExclusive(True)
+
     def set_active_plugin_tool(self, plugin_instance):
         """Set the active plugin tool on the canvas view."""
         self.view.set_active_plugin_tool(plugin_instance)
+
+    def fill_color_label(self):
+        color = QColor(self.current_fill_color)
+        if color.alpha() == 0:
+            return "Transparent"
+        if color.alpha() < 255:
+            return color.name(QColor.NameFormat.HexArgb)
+        return color.name()
+
+    def set_fill_color(self, color: QColor, source: str = "picker"):
+        qcolor = QColor(color)
+        if not qcolor.isValid():
+            return False
+        self.current_fill_color = qcolor
+        settings_value = qcolor.name(QColor.NameFormat.HexArgb) if qcolor.alpha() < 255 else qcolor.name()
+        self.settings.setValue("tools/fill_color", settings_value)
+        self.view.invalidate_fill_cursor()
+        self._refresh_fill_palette()
+        self._status_bar.showMessage(
+            f"Fill colour set to {self.fill_color_label()} from {source}",
+            5000,
+        )
+        return True
+
+    def activate_colour_picker_tool(self):
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
+            if self._pick_colour_with_hyprpicker():
+                return
+        self.view.set_tool(ToolType.COLOUR_PICKER)
+
+    def _pick_colour_with_hyprpicker(self):
+        picker = shutil.which("hyprpicker")
+        if not picker:
+            return False
+        self._status_bar.showMessage("Colour Picker: choose a screen colour", 3000)
+        QApplication.processEvents()
+        try:
+            result = subprocess.run(
+                [
+                    picker,
+                    "--format=hex",
+                    "--lowercase-hex",
+                    "--no-fancy",
+                    "--quiet",
+                ],
+                capture_output=True,
+                text=True,
+            )
+        except Exception as exc:
+            self._status_bar.showMessage(f"Colour Picker: hyprpicker failed ({exc})", 5000)
+            return False
+
+        output = (result.stdout or "").strip().splitlines()
+        color_text = output[-1].strip() if output else ""
+        color = QColor(color_text)
+        if result.returncode == 0 and color.isValid():
+            self.set_fill_color(color, "Omarchy picker")
+            return True
+        if result.returncode != 0:
+            self._status_bar.showMessage("Colour Picker canceled; click the canvas to sample instead", 4000)
+        return False
 
     def activate_cutout_tool(self):
         self.view.set_cutout_add_mode(
@@ -5682,7 +6345,7 @@ class MainWindow(QMainWindow):
         # Each entry: (id, icon_name, text, callback, shortcut, is_core)
         core_actions = [
             ("pointer", "toolbar_icon_pointer", "Pointer", lambda: self.view.set_tool(ToolType.SELECT), None, True),
-            ("select", "toolbar_icon_selection", "Select", lambda: self.view.set_tool(ToolType.SELECT), "S", True),
+            ("select", "toolbar_icon_selection", "Select", lambda: self.view.set_tool(ToolType.SELECTION), "S", True),
             ("cutout", "toolbar_icon_cut", "Cutout", self.activate_cutout_tool, None, True),
             ("move", "toolbar_icon_move", "Move", lambda: self.view.set_tool(ToolType.MOVE), None, True),
             ("rotate", "toolbar_icon_rotate", "Rotate", lambda: self.view.set_tool(ToolType.ROTATE), None, True),
@@ -5705,6 +6368,8 @@ class MainWindow(QMainWindow):
             ("blur", "toolbar_icon_blur", "Blur", lambda: self.view.set_tool(ToolType.BLUR), "B", True),
             ("highlight", "toolbar_icon_highlight", "Highlight", lambda: self.view.set_tool(ToolType.HIGHLIGHT), "H", True),
             ("border", "toolbar_icon_border", "Border", lambda: self.view.set_tool(ToolType.BORDER), None, True),
+            ("colour_picker", "toolbar_icon_colour_picker", "Eyedropper", self.activate_colour_picker_tool, "I", True),
+            ("fill", "toolbar_icon_fill", "Fill", lambda: self.view.set_tool(ToolType.FILL), "F", True),
             ("text", "toolbar_icon_text", "Text", lambda: self.view.set_tool(ToolType.TEXT), None, True),
         ]
         
@@ -6358,6 +7023,59 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(f"Saved selected items to {candidate}", 5000)
         else:
             self._status_bar.showMessage(f"ERROR: Failed to save selected items to {candidate}", 5000)
+
+    def copy_selected_items_to_clipboard(self, items=None):
+        if isinstance(items, bool):
+            items = None
+        items = items if items is not None else self._selected_layer_items()
+        if not items:
+            self._status_bar.showMessage("Select at least one item to copy", 4000)
+            return False
+        image = self._capture_scene_image(items)
+        if image is None:
+            self._status_bar.showMessage("Selected items could not be copied", 4000)
+            return False
+        label = "Item" if len(items) == 1 else f"{len(items)} items"
+        return self.copy_image_to_clipboard(image, label)
+
+    def copy_image_to_clipboard(self, image: QImage, label: str = "Image"):
+        if image is None or image.isNull():
+            self._status_bar.showMessage("Image could not be copied", 4000)
+            return False
+        png_bytes = self._encoded_image_bytes(image, "PNG")
+        if png_bytes is None:
+            self._status_bar.showMessage("ERROR: Failed to encode image for clipboard", 5000)
+            return False
+        mime_data = QMimeData()
+        mime_data.setData("image/png", QByteArray(png_bytes))
+        mime_data.setImageData(image)
+        QApplication.clipboard().setMimeData(mime_data)
+        self._notify_clipboard_image(label, image)
+        return True
+
+    def _notify_clipboard_image(self, label: str, image: QImage):
+        message = f"{label} copied to clipboard as PNG ({image.width()}x{image.height()})"
+        self._status_bar.showMessage(message, 5000)
+        notify_send = shutil.which("notify-send")
+        if not notify_send:
+            return
+        try:
+            subprocess.Popen(
+                [
+                    notify_send,
+                    "-a",
+                    "CanvasForge",
+                    "-t",
+                    "2500",
+                    "CanvasForge",
+                    message,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception:
+            pass
 
     def _ensure_save_directory(self):
         self.default_save_dir.mkdir(parents=True, exist_ok=True)

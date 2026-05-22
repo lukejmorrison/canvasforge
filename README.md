@@ -25,6 +25,7 @@ See the [full Omarchy setup guide](#omarchy-setup) below.
 - **Screenshot Editor for Omarchy** — Deep integration as a Print Screen replacement with monitor-accurate canvases and scratchpad support.
 - **Powerful Annotation Tools** — Arrows, callouts, steps, blur, highlight, borders, text, and vector shapes with live previews.
 - **Smart Selection & Cutouts** — Draw regions on images, move them around, or extract them cleanly.
+- **Colour Picker + Fill** — Pick colours from the canvas or Omarchy `hyprpicker`, then bucket-fill connected raster-image regions with undo and transparent fill support.
 - **Layer & Repository System** — Full layer management + a persistent image library that watches your Screenshots folder.
 - **One-Click Agent Handoff** — Send to Claude, Codex, OpenClaw, Wizwam, or directly to Grok TUI via clean clipboard JPEG.
 - **Flawless Export** — Flatten selected or all layers with hidden handles for pixel-perfect output.
@@ -103,6 +104,8 @@ The installer now auto-heals unhealthy virtual environments and retries Python d
 ## Usage Notes
 
 - Use the toolbar or keyboard shortcuts (`S` for select) to switch tools. Select supports click, Ctrl/Cmd-click toggles, Ctrl/Cmd+A select-all, and marquee selection that stays in sync with the layer list.
+- Use **Eyedropper** (`I`) to choose the active fill colour with the canvas picker preview, then **Fill** (`F`) to bucket-fill a connected area inside a raster image layer. Hold Alt while clicking Eyedropper to use Omarchy's `hyprpicker` screen picker instead.
+- Use the right-side **Details - [Tool] Tool - Colour Selector Pallet** panel above Repository to pick Fill colours from swatches, choose a custom alpha-aware colour, or select Transparent for cutaway fills.
 - Use the **View** menu for zoom in/out, zoom to fit, actual size, shrink-to-fit, pixel grid, background color, sidebar visibility, and quick focus actions for Details, Library, and Recent Captures.
 - Enable **Edit → Preferences → Canvas → Zoom with Scroll Wheel** for Photoshop-style wheel zoom at the cursor. Turn it off to use Photoshop's stock wheel behavior: wheel pans vertically, Alt+wheel zooms. The same Canvas preferences also expose Animated Zoom and sensitivity controls for smoother wheel flicks.
 - Alt-drag canvas edges or corners to snap the workspace to common X.com, social, video, web, and connected-monitor sizes. The resize badge names the snapped preset, and the tag below the canvas shows resolution, aspect ratio, PNG type, and transparency status.
