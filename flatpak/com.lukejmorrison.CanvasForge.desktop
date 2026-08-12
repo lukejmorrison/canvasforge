@@ -2,7 +2,13 @@
 Type=Application
 Name=CanvasForge
 Comment=Remix screenshots, snippets, and vectors
-Exec=canvasforge
+Exec=canvasforge %F
+TryExec=canvasforge
 Icon=com.lukejmorrison.CanvasForge
 Terminal=false
-Categories=AudioVideo;Graphics;
+StartupNotify=false
+StartupWMClass=canvasforge
+SingleMainWindow=true
+MimeType=image/png;image/jpeg;image/webp;image/bmp;image/gif;image/svg+xml;
+Categories=Graphics;2DGraphics;RasterGraphics;AudioVideo;
+Keywords=screenshot;annotation;canvas;omarchy;

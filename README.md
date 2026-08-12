@@ -151,9 +151,9 @@ Add these lines to your Hyprland config:
 bind = SUPER, S, togglespecialworkspace, canvasforge
 
 # Rules
-windowrulev2 = workspace special:canvasforge, class:^(CanvasForge)$
-windowrulev2 = float, class:^(CanvasForge)$
-windowrulev2 = size 80% 80%, class:^(CanvasForge)$
+windowrulev2 = workspace special:canvasforge, class:^(canvasforge|CanvasForge)$
+windowrulev2 = float, class:^(canvasforge|CanvasForge)$
+windowrulev2 = size 80% 80%, class:^(canvasforge|CanvasForge)$
 ```
 
 Now **Print Screen** sends the capture to your scratchpad. Press **Super + S** and CanvasForge appears on whatever monitor your mouse is on, with a perfectly sized canvas.

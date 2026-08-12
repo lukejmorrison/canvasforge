@@ -5,15 +5,18 @@ import os
 import time
 import math
 
-# Force X11 backend on Wayland+NVIDIA to prevent compositor lockups
+# Force X11 backend on Wayland+NVIDIA to prevent compositor lockups.
 # See: featurerequest/ProblemLog_WaylandCosmicLockup.md
-if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
-    try:
-        result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=5)
-        if 'NVIDIA' in result.stdout:
-            os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
-    except Exception:
-        pass  # Fall through to default behavior
+# Use device nodes instead of `lspci` so startup cannot block for seconds
+# (a hung first launch makes Omarchy's uwsm-app miss its 5s lock).
+if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+    nvidia_markers = (
+        "/proc/driver/nvidia/version",
+        "/dev/nvidiactl",
+        "/dev/nvidia0",
+    )
+    if any(os.path.exists(path) for path in nvidia_markers):
+        os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 from enum import Enum, auto
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphicsScene,
@@ -34,6 +37,7 @@ CLIPBOARD_JPEG_QUALITY = 88
 
 # Supported image extensions for CLI opening (screenshot editor integration, drag/drop, etc.)
 SUPPORTED_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg')
+INSTANCE_SOCKET_NAME = "canvasforge.instance"
 
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
@@ -43,6 +47,7 @@ from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QPainter, QIcon, QPen, 
                      QFontMetrics, QPainterPath, QPolygonF, QCursor)
 from PyQt6.QtCore import (Qt, QTimer, QPointF, QPoint, pyqtSignal, QRectF, QSize, QSettings, 
                           QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl)
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from pathlib import Path
 import datetime
 from image_library_panel import ImageLibraryPanel
@@ -4685,9 +4690,9 @@ class PreferencesDialog(QDialog):
             "<b>Recommended Hyprland configuration:</b><br>"
             "<code>bind = SUPER, S, togglespecialworkspace, canvasforge</code><br><br>"
             "<b>Window rules (add these to your Hyprland config):</b><br>"
-            "<code>windowrulev2 = workspace special:canvasforge, class:^(CanvasForge)$</code><br>"
-            "<code>windowrulev2 = float, class:^(CanvasForge)$</code><br>"
-            "<code>windowrulev2 = size 80% 80%, class:^(CanvasForge)$</code><br><br>"
+            "<code>windowrulev2 = workspace special:canvasforge, class:^(canvasforge|CanvasForge)$</code><br>"
+            "<code>windowrulev2 = float, class:^(canvasforge|CanvasForge)$</code><br>"
+            "<code>windowrulev2 = size 80% 80%, class:^(canvasforge|CanvasForge)$</code><br><br>"
             "Also set <b>Window → Startup Behavior → \"Open on Screen with Mouse\"</b> so it appears on the monitor your mouse is on."
         )
         scratchpad_help.setStyleSheet("color: #888; font-size: 11px; background-color: #2a2f3a; padding: 8px; border-radius: 4px;")
@@ -7699,6 +7704,69 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+    def _reveal_window(self):
+        """Show and focus this window, including when it was hidden in the scratchpad."""
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def handle_instance_message(self, payload: str):
+        """Handle argv handed off from a second CanvasForge process."""
+        args = [part for part in payload.split("\0") if part]
+        screenshot_editor_mode = "--screenshot-editor" in args or "--omarchy-editor" in args
+        image_path = None
+        for arg in args:
+            if os.path.isfile(arg) and arg.lower().endswith(SUPPORTED_IMAGE_EXTENSIONS):
+                image_path = arg
+                break
+        if image_path:
+            self.load_screenshot_for_editing(image_path, screenshot_editor_mode=screenshot_editor_mode)
+            if not screenshot_editor_mode:
+                self._reveal_window()
+            return
+        self._reveal_window()
+
+
+def _handoff_to_running_instance(argv) -> bool:
+    """If CanvasForge is already running, forward argv and exit."""
+    socket = QLocalSocket()
+    socket.connectToServer(INSTANCE_SOCKET_NAME)
+    if not socket.waitForConnected(200):
+        return False
+    payload = "\0".join(argv[1:]).encode("utf-8")
+    socket.write(payload)
+    socket.waitForBytesWritten(400)
+    socket.disconnectFromServer()
+    return True
+
+
+def _start_instance_server(window: "MainWindow") -> QLocalServer:
+    server = QLocalServer(window)
+    if not server.listen(INSTANCE_SOCKET_NAME):
+        QLocalServer.removeServer(INSTANCE_SOCKET_NAME)
+        server.listen(INSTANCE_SOCKET_NAME)
+    if not server.isListening():
+        return server
+
+    def _on_connection():
+        conn = server.nextPendingConnection()
+        if conn is None:
+            return
+
+        def _read():
+            data = bytes(conn.readAll()).decode("utf-8", "replace")
+            if data:
+                window.handle_instance_message(data)
+            conn.disconnectFromServer()
+
+        conn.readyRead.connect(_read)
+        if conn.bytesAvailable():
+            _read()
+
+    server.newConnection.connect(_on_connection)
+    return server
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     
@@ -7715,7 +7783,11 @@ if __name__ == "__main__":
     )
     
     apply_dark_theme(app)
+    if _handoff_to_running_instance(sys.argv):
+        sys.exit(0)
+
     window = MainWindow()
+    window._instance_server = _start_instance_server(window)
     window.show()
 
     # Parse CLI arguments

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-08-12 20:20] Omarchy uwsm-app launch lock
+
+### Fixed
+- **Omarchy "App failure" lock:** Starting CanvasForge from the app menu no longer wedges UWSM's `/run/user/$UID/uwsm-app.lock`. The desktop entry now uses an unquoted Exec line, a stable `StartupWMClass=canvasforge`, and `StartupNotify=false` so Omarchy can match the running window instead of launching a second copy.
+- **Single-instance handoff:** A second `canvasforge` process forwards its arguments to the running window and exits, so Print Screen / app-menu relaunches reuse the existing session.
+- **Faster Wayland NVIDIA probe:** Replaced the 5-second `lspci` startup probe with device-node checks so the first window can appear before UWSM's lock timeout.
+
 ## [2026-08-12 20:15] Forge toolbar icon set
 
 ### Changed

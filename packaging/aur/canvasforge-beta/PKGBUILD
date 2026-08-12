@@ -46,10 +46,16 @@ EOF
 Type=Application
 Name=CanvasForge Beta ${_tagver}
 Comment=Remix screenshots, snippets, and vectors
-Exec=canvasforge
+Exec=canvasforge %F
+TryExec=canvasforge
 Icon=canvasforge
 Terminal=false
-Categories=Graphics;AudioVideo;
+StartupNotify=false
+StartupWMClass=canvasforge
+SingleMainWindow=true
+MimeType=image/png;image/jpeg;image/webp;image/bmp;image/gif;image/svg+xml;
+Categories=Graphics;2DGraphics;RasterGraphics;AudioVideo;
+Keywords=screenshot;annotation;canvas;omarchy;
 EOF
 
   install -Dm644 \

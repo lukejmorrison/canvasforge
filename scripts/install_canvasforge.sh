@@ -151,15 +151,24 @@ else
 fi
 
 mkdir -p "$DESKTOP_DIR"
+# Desktop Entry spec: do not quote Exec unless the path has reserved characters.
+# Quoted Exec lines break Omarchy's uwsm-app desktop parser and can wedge the
+# launcher lock at /run/user/$UID/uwsm-app.lock.
 cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=$APP_NAME
 Comment=Remix screenshots, snippets, and vectors
-Exec="$LAUNCHER_SCRIPT"
+Exec=$LAUNCHER_SCRIPT %F
+TryExec=$LAUNCHER_SCRIPT
 Icon=canvasforge
 Terminal=false
-Categories=AudioVideo;Graphics;
+StartupNotify=false
+StartupWMClass=canvasforge
+SingleMainWindow=true
+MimeType=image/png;image/jpeg;image/webp;image/bmp;image/gif;image/svg+xml;
+Categories=Graphics;2DGraphics;RasterGraphics;AudioVideo;
+Keywords=screenshot;annotation;canvas;omarchy;
 EOF
 chmod 644 "$DESKTOP_FILE"
 
