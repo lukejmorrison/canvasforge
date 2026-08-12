@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider, QScrollArea, QButtonGroup)
 import shutil
 
-__version__ = "0.6.0-beta.8"
+__version__ = "0.6.0-beta.9"
 CLIPBOARD_JPEG_MAX_SIDE = 1440
 CLIPBOARD_JPEG_QUALITY = 88
 
@@ -38,15 +38,15 @@ SUPPORTED_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', 
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
-from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QPainter, QIcon, QPen, QColor, QBrush,
+from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QActionGroup, QPainter, QIcon, QPen, QColor, QBrush,
                      QFont, QTransform, QClipboard, QImage, QKeySequence, QTextCursor, QPalette,
-                     QFontMetrics, QPainterPath, QPolygonF, QCursor)
-from PyQt6.QtCore import (Qt, QTimer, QPointF, QPoint, pyqtSignal, QRectF, QSize, QSettings, 
-                          QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl)
+                     QFontMetrics, QPainterPath, QPolygonF, QCursor, QShortcut, QDesktopServices)
+from PyQt6.QtCore import (Qt, QTimer, QPointF, QPoint, pyqtSignal, QRect, QRectF, QSize, QSettings,
+                          QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl, QElapsedTimer)
 from pathlib import Path
 import datetime
 from image_library_panel import ImageLibraryPanel
-from undo_manager import UndoManager, CallbackAction, ImageEditAction
+from undo_manager import UndoManager, CallbackAction, ImageEditAction, RegionImageEditAction
 from plugin_manager import PluginManager
 
 
@@ -424,10 +424,16 @@ class WrappingToolBar(QWidget):
         self._separators.clear()
 
     def resizeEvent(self, event):
-        """Rebuild layout when resized."""
+        """Rebuild layout when resized (debounced while autofitting)."""
         super().resizeEvent(event)
         if self._autofit:
-            self._run_autofit()
+            if not hasattr(self, "_autofit_debounce"):
+                self._autofit_debounce = QTimer(self)
+                self._autofit_debounce.setSingleShot(True)
+                self._autofit_debounce.setInterval(100)
+                self._autofit_debounce.timeout.connect(self._run_autofit)
+            self._autofit_debounce.start()
+            return
         self._layout.rebuild(self.width())
 
 
@@ -1158,7 +1164,9 @@ class SelectionOverlay(QGraphicsRectItem):
         fill = QColor("yellow")
         fill.setAlpha(50)
         self.setBrush(QBrush(fill))
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        # View owns move/lift gestures; keep overlay non-movable so the yellow
+        # marker cannot drift independently of the clipped pixels.
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton)
@@ -1167,6 +1175,16 @@ class SelectionOverlay(QGraphicsRectItem):
         self.setVisible(True)
         self._active_handle_index = None
         self._drag_start_rect = QRectF()
+        self._locked = False
+
+    def set_locked(self, locked: bool):
+        self._locked = bool(locked)
+        if self._locked:
+            pen = QPen(QColor("yellow"), 2, Qt.PenStyle.DashLine)
+            self.setPen(pen)
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        else:
+            self.setCursor(Qt.CursorShape.CrossCursor)
 
     def contextMenuEvent(self, event):
         scene = self.scene()
@@ -1768,6 +1786,41 @@ class CanvasBoundsItem(QGraphicsRectItem):
         self.finish_resize()
 
 
+def _magnifier_grab_viewport(view, view_pos, source_radius_px, target_rect, painter):
+    """Paint a zoomed viewport grab into target_rect (avoids full scene.render)."""
+    viewport = view.viewport()
+    grab_r = max(4, int(source_radius_px))
+    src = QRect(
+        int(view_pos.x()) - grab_r,
+        int(view_pos.y()) - grab_r,
+        grab_r * 2,
+        grab_r * 2,
+    )
+    # Expand grab to stay within viewport; pad with background if near edges.
+    vp_rect = viewport.rect()
+    clipped = src.intersected(vp_rect)
+    if clipped.isEmpty():
+        return False
+    grabbed = viewport.grab(clipped)
+    if grabbed.isNull():
+        return False
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+    # Map the clipped grab into target_rect proportionally to the full source square.
+    sx = (clipped.x() - src.x()) / max(1, src.width())
+    sy = (clipped.y() - src.y()) / max(1, src.height())
+    sw = clipped.width() / max(1, src.width())
+    sh = clipped.height() / max(1, src.height())
+    dest = QRectF(
+        target_rect.x() + sx * target_rect.width(),
+        target_rect.y() + sy * target_rect.height(),
+        sw * target_rect.width(),
+        sh * target_rect.height(),
+    )
+    painter.fillRect(target_rect, view.backgroundBrush())
+    painter.drawPixmap(dest, grabbed, QRectF(grabbed.rect()))
+    return True
+
+
 class SelectionMagnifier(QWidget):
     def __init__(self, view):
         super().__init__(view.viewport())
@@ -1776,6 +1829,9 @@ class SelectionMagnifier(QWidget):
         self._scene_pos = QPointF()
         self._diameter = 132
         self._source_radius = 24
+        self._min_repaint_ms = 33
+        self._last_paint = QElapsedTimer()
+        self._last_paint.start()
         self.setFixedSize(self._diameter, self._diameter)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.hide()
@@ -1793,7 +1849,9 @@ class SelectionMagnifier(QWidget):
         self.move(max(0, x), max(0, y))
         self.show()
         self.raise_()
-        self.update()
+        if self._last_paint.elapsed() >= self._min_repaint_ms or not self.isVisible():
+            self._last_paint.restart()
+            self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1802,13 +1860,16 @@ class SelectionMagnifier(QWidget):
         path = QPainterPath()
         path.addEllipse(outer)
         painter.setClipPath(path)
-        source = QRectF(
-            self._scene_pos.x() - self._source_radius,
-            self._scene_pos.y() - self._source_radius,
-            self._source_radius * 2,
-            self._source_radius * 2,
-        )
-        self.view.scene().render(painter, outer, source)
+        if not _magnifier_grab_viewport(
+            self.view, self._view_pos, self._source_radius, outer, painter
+        ):
+            source = QRectF(
+                self._scene_pos.x() - self._source_radius,
+                self._scene_pos.y() - self._source_radius,
+                self._source_radius * 2,
+                self._source_radius * 2,
+            )
+            self.view.scene().render(painter, outer, source)
         painter.setClipping(False)
         painter.setPen(QPen(QColor("#111827"), 3))
         painter.drawEllipse(outer)
@@ -1831,6 +1892,9 @@ class ColourPickerMagnifier(QWidget):
         self._preview_width = 220
         self._preview_height = 104
         self._source_radius = 20
+        self._min_repaint_ms = 33
+        self._last_paint = QElapsedTimer()
+        self._last_paint.start()
         self.setFixedSize(self._preview_width, self._preview_height)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.hide()
@@ -1853,7 +1917,9 @@ class ColourPickerMagnifier(QWidget):
         self.move(x, y)
         self.show()
         self.raise_()
-        self.update()
+        if self._last_paint.elapsed() >= self._min_repaint_ms:
+            self._last_paint.restart()
+            self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1863,13 +1929,16 @@ class ColourPickerMagnifier(QWidget):
         path.addRoundedRect(outer, 4, 4)
         painter.setClipPath(path)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-        source = QRectF(
-            self._scene_pos.x() - self._source_radius,
-            self._scene_pos.y() - self._source_radius,
-            self._source_radius * 2,
-            self._source_radius * 2,
-        )
-        self.view.scene().render(painter, outer, source)
+        if not _magnifier_grab_viewport(
+            self.view, self._view_pos, self._source_radius, outer, painter
+        ):
+            source = QRectF(
+                self._scene_pos.x() - self._source_radius,
+                self._scene_pos.y() - self._source_radius,
+                self._source_radius * 2,
+                self._source_radius * 2,
+            )
+            self.view.scene().render(painter, outer, source)
         painter.setClipping(False)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(QPen(QColor("#1f2937"), 2))
@@ -1922,12 +1991,9 @@ class RasterItem(ContextMenuForwarder, QGraphicsPixmapItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         self.setTransformOriginPoint(pixmap.width() / 2, pixmap.height() / 2)
-        ba = QByteArray()
-        buffer = QBuffer(ba)
-        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        pixmap.save(buffer, "PNG")
-        buffer.close()
-        self.image_bytes = bytes(ba)
+        self._cached_image = None
+        self._image_bytes = None
+        self._image_bytes_dirty = True
         self.handles = None
         self._selection_overlay = None
         self._selection_start_scene = None
@@ -1942,6 +2008,40 @@ class RasterItem(ContextMenuForwarder, QGraphicsPixmapItem):
             image = image.convertToFormat(QImage.Format.Format_ARGB32)
             return QPixmap.fromImage(image)
         return pixmap
+
+    def setPixmap(self, pixmap):
+        super().setPixmap(pixmap)
+        self._invalidate_image_cache()
+
+    def _invalidate_image_cache(self):
+        self._cached_image = None
+        self._image_bytes = None
+        self._image_bytes_dirty = True
+
+    def cached_image(self) -> QImage:
+        """Lazily cached ARGB32 QImage for pixel sampling / crop without toImage() thrash."""
+        if self._cached_image is None:
+            self._cached_image = self.pixmap().toImage().convertToFormat(
+                QImage.Format.Format_ARGB32
+            )
+        return self._cached_image
+
+    @property
+    def image_bytes(self) -> bytes:
+        if self._image_bytes_dirty or self._image_bytes is None:
+            ba = QByteArray()
+            buffer = QBuffer(ba)
+            buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+            self.pixmap().save(buffer, "PNG")
+            buffer.close()
+            self._image_bytes = bytes(ba)
+            self._image_bytes_dirty = False
+        return self._image_bytes
+
+    @image_bytes.setter
+    def image_bytes(self, value):
+        self._image_bytes = bytes(value) if value is not None else None
+        self._image_bytes_dirty = self._image_bytes is None
 
     def startSelectionOverlay(self, scene_pos):
         self.clearSelectionOverlay()
@@ -1964,6 +2064,8 @@ class RasterItem(ContextMenuForwarder, QGraphicsPixmapItem):
 
     def lockSelectionOverlay(self):
         self._selection_start_scene = None
+        if self._selection_overlay:
+            self._selection_overlay.set_locked(True)
 
     def selectionOverlay(self):
         return self._selection_overlay
@@ -1991,6 +2093,8 @@ class RasterItem(ContextMenuForwarder, QGraphicsPixmapItem):
             self._selection_overlay.setZValue(self.zValue() + 5)
             self._selection_overlay.setSelected(True)
             self._selection_overlay.setFocus()
+            if self._selection_start_scene is None:
+                self._selection_overlay.set_locked(True)
 
     def clearSelectionOverlay(self):
         if self._selection_overlay and self._selection_overlay.scene():
@@ -2020,23 +2124,22 @@ class RasterItem(ContextMenuForwarder, QGraphicsPixmapItem):
             return None
 
         select_rect_int = local_rect.toAlignedRect()
-        cropped_image = self.pixmap().toImage().copy(select_rect_int)
-        cropped_image = cropped_image.convertToFormat(QImage.Format.Format_ARGB32)
+        source_image = self.cached_image()
+        cropped_image = source_image.copy(select_rect_int)
         cropped_pixmap = QPixmap.fromImage(cropped_image)
 
         if remove_original:
-            base_image = self.pixmap().toImage().convertToFormat(QImage.Format.Format_ARGB32)
+            base_image = QImage(source_image)
             painter = QPainter(base_image)
             if fill_mode == FillMode.TRANSPARENT:
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
                 painter.fillRect(select_rect_int, Qt.GlobalColor.transparent)
             elif fill_mode == FillMode.AUTO_FILL:
-                avg_color = self.pixmap().toImage().pixelColor(local_rect.center().toPoint())
+                avg_color = source_image.pixelColor(local_rect.center().toPoint())
                 painter.fillRect(select_rect_int, avg_color)
             painter.end()
 
             self.setPixmap(QPixmap.fromImage(base_image))
-            self.updateImageBytes()
 
         new_item = RasterItem(cropped_pixmap)
         new_item.setScale(self.scale())
@@ -2061,18 +2164,12 @@ class RasterItem(ContextMenuForwarder, QGraphicsPixmapItem):
         return center_scene_pos - rotated
 
     def updateImageBytes(self):
-        ba = QByteArray()
-        buffer = QBuffer(ba)
-        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        self.pixmap().save(buffer, "PNG")
-        buffer.close()
-        self.image_bytes = bytes(ba)
+        self._invalidate_image_cache()
 
     def applyPixmapEdit(self, pixmap: QPixmap):
         pixmap = self._ensure_argb_pixmap(pixmap)
         self.setPixmap(pixmap)
         self.setTransformOriginPoint(pixmap.width() / 2, pixmap.height() / 2)
-        self.updateImageBytes()
         if self.handles:
             self.handles.update_handles()
 
@@ -2111,6 +2208,7 @@ class VectorItem(ContextMenuForwarder, QGraphicsSvgItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self.renderer = renderer
         self.svg_bytes = bytes(svg_bytes) if svg_bytes else None
         self.source_path = str(source_path) if source_path else None
@@ -2238,7 +2336,9 @@ class CanvasBlurItem(ContextMenuForwarder, QGraphicsPixmapItem):
             # Back-compat: map an old radius value to a strength setting.
             strength = max(1, min(100, int(blur_radius)))
         self._strength = int(strength) if strength is not None else self.DEFAULT_STRENGTH
-        baked = self._bake(self._source, self._strength)
+        self._baked_full = None
+        self._baked_strength = None
+        baked = self._baked_at_strength(self._strength)
         super().__init__(baked)
         rect = self.boundingRect()
         self.setTransformOriginPoint(rect.width() / 2, rect.height() / 2)
@@ -2279,6 +2379,13 @@ class CanvasBlurItem(ContextMenuForwarder, QGraphicsPixmapItem):
         painter.end()
         return baked
 
+    def _baked_at_strength(self, strength: int) -> QPixmap:
+        s = max(1, min(100, int(strength)))
+        if self._baked_full is None or self._baked_strength != s:
+            self._baked_full = self._bake(self._source, s)
+            self._baked_strength = s
+        return self._baked_full
+
     def setStrength(self, strength: int):
         self._strength = max(1, min(100, int(strength)))
         # Heal any legacy item that still has the old QGraphicsBlurEffect
@@ -2286,7 +2393,7 @@ class CanvasBlurItem(ContextMenuForwarder, QGraphicsPixmapItem):
         # would make the pixmap grow on every strength change.
         if self.graphicsEffect() is not None:
             self.setGraphicsEffect(None)
-        baked = self._bake(self._source, self._strength)
+        baked = self._baked_at_strength(self._strength)
         # Use the *pixmap* size as the source of truth — never boundingRect,
         # which can include effect-extended margins.
         cur = self.pixmap()
@@ -2354,13 +2461,12 @@ class CanvasBlurItem(ContextMenuForwarder, QGraphicsPixmapItem):
         )
         new_w = rect.width()
         new_h = rect.height()
-        # Bake fresh from the pristine source so the pixmap can never grow
-        # past the user's actual drag.
-        baked = self._bake(self._source, self._strength)
+        # Fast-scale a cached bake during drag; smooth re-scale on release.
+        baked = self._baked_at_strength(self._strength)
         scaled = baked.scaled(
             int(new_w), int(new_h),
             Qt.AspectRatioMode.IgnoreAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
+            Qt.TransformationMode.FastTransformation,
         )
         self.prepareGeometryChange()
         self.setPixmap(scaled)
@@ -2371,6 +2477,21 @@ class CanvasBlurItem(ContextMenuForwarder, QGraphicsPixmapItem):
             self.handles.update_handles()
 
     def handle_resize_release(self, handle, scene_pos):
+        if self._rs_idx is not None:
+            pix = self.pixmap()
+            if not pix.isNull():
+                baked = self._baked_at_strength(self._strength)
+                smooth = baked.scaled(
+                    max(self.MIN_DIM, pix.width()),
+                    max(self.MIN_DIM, pix.height()),
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.prepareGeometryChange()
+                self.setPixmap(smooth)
+                self.setTransformOriginPoint(smooth.width() / 2, smooth.height() / 2)
+                if getattr(self, "handles", None):
+                    self.handles.update_handles()
         self._rs_idx = None
 
     def contextMenuEvent(self, event):
@@ -2578,6 +2699,12 @@ class CanvasView(QGraphicsView):
         self._selection_creating = False
         self._selection_drop_active = False
         self._selection_drop_pos = None
+        self._selection_carry_active = False
+        self._selection_carry_item = None
+        self._selection_origin_rect = None
+        self._selection_host_pre_punch = None
+        self._selection_grab_offset = QPointF()
+        self._selection_snapped = False
         self._cutout_overlay = None
         self._cutout_start_scene = None
         self._cutout_target_item = None
@@ -2592,9 +2719,14 @@ class CanvasView(QGraphicsView):
         self._zoom_with_scroll_wheel = self.main_window.settings.value(
             "canvas/zoom_with_scroll_wheel", True, type=bool
         )
-        self._animated_zoom_enabled = self.main_window.settings.value(
-            "canvas/animated_zoom", True, type=bool
-        )
+        default_animated_zoom = sys.platform != "darwin"
+        if self.main_window.settings.contains("canvas/animated_zoom"):
+            self._animated_zoom_enabled = self.main_window.settings.value(
+                "canvas/animated_zoom", default_animated_zoom, type=bool
+            )
+        else:
+            self._animated_zoom_enabled = default_animated_zoom
+            self.main_window.settings.setValue("canvas/animated_zoom", default_animated_zoom)
         self._zoom_sensitivity = float(self.main_window.settings.value(
             "canvas/zoom_sensitivity", 100,
         )) / 100.0
@@ -2602,8 +2734,11 @@ class CanvasView(QGraphicsView):
         self._smooth_zoom_view_pos = QPoint()
         self._smooth_zoom_scene_pos = QPointF()
         self._smooth_zoom_timer = QTimer(self)
-        self._smooth_zoom_timer.setInterval(16)
+        self._smooth_zoom_timer.setInterval(33)
         self._smooth_zoom_timer.timeout.connect(self._apply_scheduled_zoom)
+        self._smooth_zoom_clock = QElapsedTimer()
+        self._smooth_zoom_clock.start()
+        self._smooth_zoom_last_ms = 0
         bg_name = self.main_window.settings.value("view/background_color", "#d7dde5")
         self.set_view_background(QColor(str(bg_name)))
 
@@ -2633,11 +2768,23 @@ class CanvasView(QGraphicsView):
         row.addWidget(value_lbl)
         layout.addLayout(row)
 
+        debounce = QTimer(dialog)
+        debounce.setSingleShot(True)
+        debounce.setInterval(120)
+        pending = {"value": slider.value()}
+
         def apply_value(v):
             value_lbl.setText(str(v))
+            pending["value"] = v
+            debounce.start()
+
+        def commit_value():
+            v = pending["value"]
             for it in blur_items:
                 it.setStrength(v)
+
         slider.valueChanged.connect(apply_value)
+        debounce.timeout.connect(commit_value)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -2647,8 +2794,12 @@ class CanvasView(QGraphicsView):
         layout.addWidget(buttons)
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
+            debounce.stop()
             for it, prev in original:
                 it.setStrength(prev)
+        else:
+            debounce.stop()
+            commit_value()
 
     def _pick_highlight_color(self, hl_items):
         """Pick a custom color (alpha-aware) for selected highlight items."""
@@ -2729,6 +2880,7 @@ class CanvasView(QGraphicsView):
             )
         self.main_window.update_tool_details(tool)
         self._apply_cursor()
+        self.main_window.sync_tool_action_checked(tool)
 
     def set_cutout_add_mode(self, enabled: bool):
         self._cutout_add_space = bool(enabled)
@@ -2923,12 +3075,17 @@ class CanvasView(QGraphicsView):
         if current <= 0:
             self._stop_smooth_zoom()
             return
+        now = self._smooth_zoom_clock.elapsed()
+        dt_ms = now - self._smooth_zoom_last_ms if self._smooth_zoom_last_ms else 33
+        self._smooth_zoom_last_ms = now
+        # Normalize to a ~30fps step so slow frames keep consistent zoom speed.
+        frame_scale = max(0.5, min(2.5, dt_ms / 33.0))
         remaining = math.log(self._zoom_target_factor / current)
         if abs(remaining) < 0.001:
             self._smooth_zoom_timer.stop()
             self._zoom_factor = current
             return
-        tick = max(-0.035, min(0.035, remaining * 0.35))
+        tick = max(-0.035 * frame_scale, min(0.035 * frame_scale, remaining * 0.35 * frame_scale))
         if abs(tick) < 0.002:
             tick = remaining
         self._apply_zoom_factor(
@@ -3103,6 +3260,9 @@ class CanvasView(QGraphicsView):
                 self._selection_host.updateSelectionOverlay(scene_pos)
                 self._selection_magnifier.show_at(event.pos(), scene_pos)
                 return
+            if self._selection_carry_active:
+                self._update_selection_carry(scene_pos)
+                return
             if self._selection_drop_active:
                 self._selection_drop_pos = scene_pos
                 return
@@ -3176,7 +3336,14 @@ class CanvasView(QGraphicsView):
                 if self._selection_host and self._selection_host.hasSelectionOverlay():
                     self._selection_host.lockSelectionOverlay()
                     self._selection_host.activateSelectionOverlay()
+                    self.main_window._status_bar.showMessage(
+                        "Selection ready — drag with the hand cursor to clip out",
+                        4000,
+                    )
                 self._apply_cursor()
+                return
+            if self._selection_carry_active:
+                self._finish_selection_carry(scene_pos)
                 return
             if self._selection_drop_active:
                 target_pos = self._selection_drop_pos or scene_pos
@@ -3872,6 +4039,9 @@ class CanvasView(QGraphicsView):
                 return
         
         if event.key() == Qt.Key.Key_Escape:
+            if self.current_tool == ToolType.SELECTION:
+                self._cancel_selection_mode()
+                return
             if self.current_tool == ToolType.CUTOUT:
                 self._cancel_cutout_mode()
                 return
@@ -3931,11 +4101,27 @@ class CanvasView(QGraphicsView):
             event.ignore()
             return
         overlay = self._current_overlay()
-        if self._is_overlay_related_item(clicked_item, overlay):
-            super().mousePressEvent(event)
-            return
+        # Resize handles still adjust the marquee before a lift.
+        if isinstance(clicked_item, (ResizeHandle, RotateHandle)):
+            if getattr(clicked_item, "parent_item", None) is overlay:
+                super().mousePressEvent(event)
+                return
+        locked = bool(
+            overlay
+            and getattr(overlay, "_locked", False)
+            and not self._selection_creating
+            and self._selection_host
+        )
+        if locked and overlay.scene_rect().contains(scene_pos):
+            if self._begin_selection_lift(scene_pos):
+                event.accept()
+                self._apply_cursor()
+                return
         if isinstance(clicked_item, RasterItem):
             if self._selection_host and self._selection_host is not clicked_item:
+                self._selection_host.clearSelectionOverlay()
+            elif overlay and self._selection_host is clicked_item and locked:
+                # Click outside the locked marquee on the same raster → new marquee.
                 self._selection_host.clearSelectionOverlay()
             elif overlay:
                 self._selection_host.clearSelectionOverlay()
@@ -3947,10 +4133,8 @@ class CanvasView(QGraphicsView):
             self._selection_magnifier.show_at(event.pos(), scene_pos)
             self._apply_cursor()
             return
-        if overlay:
-            self._selection_drop_active = True
-            self._selection_drop_pos = scene_pos
-            self._selection_magnifier.hide()
+        if locked:
+            # Empty-canvas press while a selection is ready: ignore (drag starts on the marquee).
             event.accept()
             self._apply_cursor()
             return
@@ -3992,7 +4176,7 @@ class CanvasView(QGraphicsView):
 
         old_pixmap = pixmap.copy()
         tolerance = int(self.main_window.settings.value("tools/fill_tolerance", 32))
-        new_pixmap, changed = self._flood_fill_pixmap(
+        new_pixmap, changed, dirty = self._flood_fill_pixmap(
             old_pixmap,
             x,
             y,
@@ -4004,10 +4188,20 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
 
-        item.applyPixmapEdit(new_pixmap)
-        self.main_window.undo_manager.push(
-            ImageEditAction(item, old_pixmap, new_pixmap.copy(), "Fill Image Area")
-        )
+        if dirty is not None:
+            old_img = old_pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+            new_img = new_pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+            old_patch = old_img.copy(dirty)
+            new_patch = new_img.copy(dirty)
+            item.applyPixmapEdit(new_pixmap)
+            self.main_window.undo_manager.push(
+                RegionImageEditAction(item, dirty, old_patch, new_patch, "Fill Image Area")
+            )
+        else:
+            item.applyPixmapEdit(new_pixmap)
+            self.main_window.undo_manager.push(
+                ImageEditAction(item, old_pixmap, new_pixmap.copy(), "Fill Image Area")
+            )
         self.main_window._status_bar.showMessage(
             f"Filled {changed:,} pixels with {self.main_window.fill_color_label()}",
             4000,
@@ -4046,7 +4240,10 @@ class CanvasView(QGraphicsView):
             local = item.mapFromScene(scene_pos)
             x = int(math.floor(local.x()))
             y = int(math.floor(local.y()))
-            return item.pixmap().toImage().pixelColor(x, y)
+            image = item.cached_image()
+            if 0 <= x < image.width() and 0 <= y < image.height():
+                return image.pixelColor(x, y)
+            return None
 
         image = QImage(1, 1, QImage.Format.Format_ARGB32)
         image.fill(Qt.GlobalColor.transparent)
@@ -4062,31 +4259,53 @@ class CanvasView(QGraphicsView):
 
     @staticmethod
     def _flood_fill_pixmap(pixmap: QPixmap, x: int, y: int, fill_color: QColor, tolerance: int):
+        """Flood fill over raw ARGB32 bytes (avoids per-pixel QColor thrash)."""
         image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
         width = image.width()
         height = image.height()
         if x < 0 or y < 0 or x >= width or y >= height:
             return None, 0
 
-        seed = image.pixelColor(x, y)
         replacement = QColor(fill_color)
         if not replacement.isValid():
             return None, 0
         tolerance = max(0, min(255, int(tolerance)))
 
-        def matches_seed(color):
-            if seed.alpha() <= tolerance:
-                return color.alpha() <= tolerance
+        ptr = image.bits()
+        ptr.setsize(image.sizeInBytes())
+        buf = memoryview(ptr).cast("B")
+        bpl = image.bytesPerLine()
+
+        def pixel_at(px, py):
+            o = py * bpl + px * 4
+            # Qt ARGB32 on little-endian is stored as B,G,R,A
+            return buf[o + 2], buf[o + 1], buf[o], buf[o + 3]
+
+        seed_r, seed_g, seed_b, seed_a = pixel_at(x, y)
+        fill_r = replacement.red()
+        fill_g = replacement.green()
+        fill_b = replacement.blue()
+        fill_a = replacement.alpha()
+        preserve_alpha = fill_a == 255
+
+        def matches(px, py):
+            r, g, b, a = pixel_at(px, py)
+            if seed_a <= tolerance:
+                return a <= tolerance
             return (
-                abs(color.alpha() - seed.alpha()) <= tolerance and
-                abs(color.red() - seed.red()) <= tolerance and
-                abs(color.green() - seed.green()) <= tolerance and
-                abs(color.blue() - seed.blue()) <= tolerance
+                abs(a - seed_a) <= tolerance
+                and abs(r - seed_r) <= tolerance
+                and abs(g - seed_g) <= tolerance
+                and abs(b - seed_b) <= tolerance
             )
 
         stack = [(x, y)]
         visited = bytearray(width * height)
         changed = 0
+        min_x = width
+        min_y = height
+        max_x = -1
+        max_y = -1
         while stack:
             px, py = stack.pop()
             if px < 0 or py < 0 or px >= width or py >= height:
@@ -4095,21 +4314,34 @@ class CanvasView(QGraphicsView):
             if visited[idx]:
                 continue
             visited[idx] = 1
-            current = image.pixelColor(px, py)
-            if not matches_seed(current):
+            if not matches(px, py):
                 continue
-            next_color = QColor(replacement)
-            if current.alpha() > 0 and replacement.alpha() == 255:
-                next_color.setAlpha(current.alpha())
-            if current.rgba() != next_color.rgba():
-                image.setPixelColor(px, py, next_color)
+            o = py * bpl + px * 4
+            cur_a = buf[o + 3]
+            out_a = cur_a if (preserve_alpha and cur_a > 0) else fill_a
+            if buf[o] != fill_b or buf[o + 1] != fill_g or buf[o + 2] != fill_r or cur_a != out_a:
+                buf[o] = fill_b
+                buf[o + 1] = fill_g
+                buf[o + 2] = fill_r
+                buf[o + 3] = out_a
                 changed += 1
+                if px < min_x:
+                    min_x = px
+                if py < min_y:
+                    min_y = py
+                if px > max_x:
+                    max_x = px
+                if py > max_y:
+                    max_y = py
             stack.append((px + 1, py))
             stack.append((px - 1, py))
             stack.append((px, py + 1))
             stack.append((px, py - 1))
 
-        return QPixmap.fromImage(image), changed
+        dirty = None
+        if changed > 0 and max_x >= min_x and max_y >= min_y:
+            dirty = QRect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+        return QPixmap.fromImage(image), changed, dirty
 
     def _is_overlay_related_item(self, item, overlay):
         if not overlay or not item:
@@ -4123,14 +4355,198 @@ class CanvasView(QGraphicsView):
     def _current_overlay(self):
         return self._selection_host.selectionOverlay() if self._selection_host else None
 
+    def _selection_snap_threshold_scene(self) -> float:
+        scale = max(0.001, self._current_view_scale())
+        return 8.0 / scale
+
+    def _begin_selection_lift(self, scene_pos) -> bool:
+        host = self._selection_host
+        if not host or not host.hasSelectionOverlay():
+            return False
+        local_rect, scene_rect = host._selection_rects()
+        if not local_rect:
+            return False
+        select_rect_int = local_rect.toAlignedRect()
+        if select_rect_int.width() < 1 or select_rect_int.height() < 1:
+            return False
+
+        source = host.cached_image()
+        cropped_image = source.copy(select_rect_int)
+        cropped_pixmap = QPixmap.fromImage(cropped_image)
+        self._selection_origin_rect = QRectF(scene_rect)
+        self._selection_host_pre_punch = host.pixmap().copy()
+
+        base_image = QImage(source)
+        painter = QPainter(base_image)
+        fill_mode = self.main_window.fill_mode
+        if fill_mode == FillMode.TRANSPARENT:
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+            painter.fillRect(select_rect_int, Qt.GlobalColor.transparent)
+        elif fill_mode == FillMode.AUTO_FILL:
+            avg_color = source.pixelColor(local_rect.center().toPoint())
+            painter.fillRect(select_rect_int, avg_color)
+        painter.end()
+        host.setPixmap(QPixmap.fromImage(base_image))
+
+        float_item = QGraphicsPixmapItem(cropped_pixmap)
+        float_item.setScale(host.scale())
+        float_item.setRotation(host.rotation())
+        float_item.setZValue(host.zValue() + 20)
+        float_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        float_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        float_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        origin_center = scene_rect.center()
+        float_item.setPos(RasterItem._scene_pos_for_center(float_item, origin_center))
+        self.scene().addItem(float_item)
+
+        host.clearSelectionOverlay()
+        self._selection_carry_item = float_item
+        self._selection_grab_offset = QPointF(scene_pos - origin_center)
+        self._selection_carry_active = True
+        self._selection_snapped = True
+        self._selection_magnifier.hide()
+        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        self.main_window._status_bar.showMessage(
+            "Dragging selection — release near the hole to snap it back",
+            3000,
+        )
+        return True
+
+    def _update_selection_carry(self, scene_pos):
+        if not self._selection_carry_active or not self._selection_carry_item:
+            return
+        if self._selection_carry_item.scene() is None:
+            return
+        center = QPointF(scene_pos - self._selection_grab_offset)
+        origin_center = self._selection_origin_rect.center()
+        delta = center - origin_center
+        dist = math.hypot(delta.x(), delta.y())
+        snapped = dist <= self._selection_snap_threshold_scene()
+        if snapped:
+            center = origin_center
+        if snapped != self._selection_snapped:
+            self._selection_snapped = snapped
+            if snapped:
+                self.main_window._status_bar.showMessage("Snap to origin", 1500)
+        self._selection_carry_item.setPos(
+            RasterItem._scene_pos_for_center(self._selection_carry_item, center)
+        )
+        # Solid outline cue while snapped.
+        if snapped:
+            self._selection_carry_item.setOpacity(1.0)
+        else:
+            self._selection_carry_item.setOpacity(0.95)
+
+    def _clear_selection_carry_item(self):
+        item = self._selection_carry_item
+        if item is not None and item.scene() is not None:
+            item.scene().removeItem(item)
+        self._selection_carry_item = None
+        self._selection_carry_active = False
+        self._selection_grab_offset = QPointF()
+        self._selection_snapped = False
+
+    def _finish_selection_carry(self, scene_pos):
+        if not self._selection_carry_active:
+            return
+        self._update_selection_carry(scene_pos)
+        host = self._selection_host
+        float_item = self._selection_carry_item
+        pre_punch = self._selection_host_pre_punch
+
+        if self._selection_snapped and host is not None and pre_punch is not None:
+            host.setPixmap(pre_punch)
+            self._clear_selection_carry_item()
+            self._selection_host_pre_punch = None
+            self._selection_origin_rect = None
+            self._selection_host = None
+            self.main_window._status_bar.showMessage("Selection snapped back into place", 3000)
+            self._apply_cursor()
+            return
+
+        if float_item is None or host is None:
+            self._cancel_selection_mode()
+            return
+
+        cropped = float_item.pixmap()
+        center = float_item.sceneBoundingRect().center()
+        new_item = RasterItem(cropped)
+        new_item.setScale(float_item.scale())
+        new_item.setRotation(float_item.rotation())
+        new_item.setPos(RasterItem._scene_pos_for_center(new_item, center))
+        host_after = host.pixmap().copy()
+        host_before = pre_punch.copy() if pre_punch is not None else None
+
+        self._clear_selection_carry_item()
+        self._selection_host_pre_punch = None
+        self._selection_origin_rect = None
+        self._selection_host = None
+
+        self.itemAdded.emit(new_item)
+
+        if host_before is not None:
+            approx = (
+                host_before.width() * host_before.height() * 4
+                + host_after.width() * host_after.height() * 4
+                + cropped.width() * cropped.height() * 4
+            )
+
+            def do_clip():
+                if host.scene() is self.scene():
+                    host.applyPixmapEdit(host_after)
+                if new_item.scene() is None:
+                    self.main_window.add_item_to_canvas(new_item)
+
+            def undo_clip():
+                if host.scene() is self.scene():
+                    host.applyPixmapEdit(host_before)
+                if new_item.scene() is self.scene():
+                    self.scene().removeItem(new_item)
+                    self.main_window.layer_list.remove_graphics_items([new_item])
+
+            # Item was already added via itemAdded; push undo for the committed clip.
+            self.main_window.undo_manager.push(
+                CallbackAction("Clip Selection", do_clip, undo_clip, approx_bytes=approx)
+            )
+
+        self.set_tool(ToolType.MOVE)
+        self.main_window._status_bar.showMessage("Selection clipped to a new layer", 3000)
+        self._apply_cursor()
+
     def _finalize_selection(self, drop_center_scene_pos, remove_original=True):
         if not self._selection_host or not self._selection_host.hasSelectionOverlay():
             return
+        host = self._selection_host
+        host_before = host.pixmap().copy() if remove_original else None
         overlay = self._current_overlay()
         center_pos = drop_center_scene_pos or (overlay.scene_rect().center() if overlay else None)
-        new_item = self._selection_host.endSelection(center_pos, self.main_window.fill_mode, remove_original)
+        new_item = host.endSelection(center_pos, self.main_window.fill_mode, remove_original)
         if new_item:
             self.itemAdded.emit(new_item)
+            if remove_original and host_before is not None:
+                host_after = host.pixmap().copy()
+                approx = (
+                    host_before.width() * host_before.height() * 4
+                    + host_after.width() * host_after.height() * 4
+                    + new_item.pixmap().width() * new_item.pixmap().height() * 4
+                )
+
+                def do_clip():
+                    if host.scene() is self.scene():
+                        host.applyPixmapEdit(host_after)
+                    if new_item.scene() is None:
+                        self.main_window.add_item_to_canvas(new_item)
+
+                def undo_clip():
+                    if host.scene() is self.scene():
+                        host.applyPixmapEdit(host_before)
+                    if new_item.scene() is self.scene():
+                        self.scene().removeItem(new_item)
+                        self.main_window.layer_list.remove_graphics_items([new_item])
+
+                self.main_window.undo_manager.push(
+                    CallbackAction("Clip Selection", do_clip, undo_clip, approx_bytes=approx)
+                )
             self.set_tool(ToolType.MOVE)
         self._selection_host = None
         self._selection_creating = False
@@ -4276,6 +4692,12 @@ class CanvasView(QGraphicsView):
         return VectorItem(renderer, svg_bytes=svg_bytes, source_path=source_path)
 
     def _cancel_selection_mode(self):
+        if self._selection_carry_active and self._selection_host is not None:
+            if self._selection_host_pre_punch is not None:
+                self._selection_host.setPixmap(self._selection_host_pre_punch)
+        self._clear_selection_carry_item()
+        self._selection_host_pre_punch = None
+        self._selection_origin_rect = None
         if self._selection_host:
             self._selection_host.clearSelectionOverlay()
         self._selection_host = None
@@ -4287,10 +4709,14 @@ class CanvasView(QGraphicsView):
 
     def _apply_cursor(self):
         if self.current_tool == ToolType.SELECTION:
-            if self._selection_creating or self._selection_drop_active or not self._selection_host:
+            if self._selection_carry_active:
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            elif self._selection_creating or not self._selection_host:
                 self.setCursor(Qt.CursorShape.CrossCursor)
+            elif self._selection_host and self._selection_host.hasSelectionOverlay():
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
             else:
-                self.setCursor(Qt.CursorShape.ArrowCursor)
+                self.setCursor(Qt.CursorShape.CrossCursor)
         elif self.current_tool == ToolType.CUTOUT:
             self.setCursor(Qt.CursorShape.CrossCursor)
         elif self.current_tool == ToolType.COLOUR_PICKER:
@@ -4323,10 +4749,14 @@ class CanvasView(QGraphicsView):
         if not color.isValid():
             color = QColor("#4b5563")
 
-        pixmap = QPixmap(32, 32)
+        dpr = float(self.devicePixelRatioF()) if hasattr(self, "devicePixelRatioF") else 1.0
+        logical = 32
+        pixel = max(32, int(logical * dpr))
+        pixmap = QPixmap(pixel, pixel)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.scale(pixel / logical, pixel / logical)
 
         tip = QPointF(4, 28)
         barrel_start = QPointF(10, 22)
@@ -4357,6 +4787,7 @@ class CanvasView(QGraphicsView):
                 painter.drawLine(QPointF(21, 29), QPointF(29, 21))
 
         painter.end()
+        pixmap.setDevicePixelRatio(dpr)
         return pixmap
 
     def invalidate_fill_cursor(self):
@@ -5456,13 +5887,10 @@ class PreferencesDialog(QDialog):
     
     def _open_plugins_folder(self):
         """Open the user plugins folder in file manager."""
-        import subprocess
         if self.plugin_manager:
-            folder = str(self.plugin_manager.user_plugin_dir)
-            try:
-                subprocess.Popen(['xdg-open', folder])
-            except Exception:
-                pass
+            folder = Path(self.plugin_manager.user_plugin_dir)
+            folder.mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
     
     def _browse_editor(self):
         """Browse for editor executable."""
@@ -5885,8 +6313,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction(copy_bundle_action)
 
         file_menu.addSeparator()
-        exit_action = QAction("Exit", self)
-        exit_action.setShortcut(QKeySequence("Ctrl+Q"))
+        exit_action = QAction("Quit CanvasForge" if sys.platform == "darwin" else "Exit", self)
+        exit_action.setMenuRole(QAction.MenuRole.QuitRole)
+        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
@@ -5921,11 +6350,27 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(select_all_action)
         edit_menu.addSeparator()
         preferences_action = QAction("Preferences...", self)
-        preferences_action.setShortcut(QKeySequence("Ctrl+,"))
+        preferences_action.setMenuRole(QAction.MenuRole.PreferencesRole)
+        preferences_action.setShortcut(QKeySequence.StandardKey.Preferences)
         preferences_action.triggered.connect(self.open_preferences)
         edit_menu.addAction(preferences_action)
 
+        about_action = QAction("About CanvasForge", self)
+        about_action.setMenuRole(QAction.MenuRole.AboutRole)
+        about_action.triggered.connect(self.open_about_preferences)
+
         self._setup_view_menu()
+        window_menu = self.menuBar().addMenu("Window")
+        minimize_action = QAction("Minimize", self)
+        minimize_action.setShortcut(QKeySequence("Ctrl+M"))
+        minimize_action.triggered.connect(self.showMinimized)
+        window_menu.addAction(minimize_action)
+        zoom_window_action = QAction("Zoom", self)
+        zoom_window_action.triggered.connect(lambda: self.showMaximized() if not self.isMaximized() else self.showNormal())
+        window_menu.addAction(zoom_window_action)
+        # On macOS Qt relocates About into the app menu via AboutRole.
+        help_menu = self.menuBar().addMenu("Help")
+        help_menu.addAction(about_action)
         
         # Connect undo manager signals
         self.undo_manager.undoAvailableChanged.connect(self.undo_action.setEnabled)
@@ -6212,9 +6657,17 @@ class MainWindow(QMainWindow):
     def update_tool_details(self, tool):
         if hasattr(self, "tool_details_title"):
             self.tool_details_title.setText(
-                f"Details - {self._tool_display_name(tool)} Tool - Colour Selector Pallet"
+                f"Details - {self._tool_display_name(tool)} Tool - Colour Selector Palette"
             )
         self._refresh_fill_palette()
+
+    def sync_tool_action_checked(self, tool):
+        actions = getattr(self, "_tool_actions_by_type", None)
+        if not actions:
+            return
+        action = actions.get(tool)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
 
     def _choose_fill_colour(self):
         from PyQt6.QtWidgets import QColorDialog
@@ -6295,12 +6748,20 @@ class MainWindow(QMainWindow):
         return True
 
     def activate_colour_picker_tool(self):
-        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
+        if sys.platform.startswith("linux") and (
+            QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier
+        ):
             if self._pick_colour_with_hyprpicker():
                 return
         self.view.set_tool(ToolType.COLOUR_PICKER)
 
+    def open_about_preferences(self):
+        """Open Preferences focused on the About tab (macOS AboutRole target)."""
+        self.open_preferences()
+
     def _pick_colour_with_hyprpicker(self):
+        if not sys.platform.startswith("linux"):
+            return False
         picker = shutil.which("hyprpicker")
         if not picker:
             return False
@@ -6342,39 +6803,46 @@ class MainWindow(QMainWindow):
         """Define all toolbar actions with their properties."""
         
         # Define core toolbar actions
-        # Each entry: (id, icon_name, text, callback, shortcut, is_core)
+        # Each entry: (id, icon_name, text, callback, shortcut, is_core, is_tool)
+        # Tools first, then command actions (save/flatten) so the toolbar reads as
+        # mode tools vs one-shot actions.
         core_actions = [
-            ("pointer", "toolbar_icon_pointer", "Pointer", lambda: self.view.set_tool(ToolType.SELECT), None, True),
-            ("select", "toolbar_icon_selection", "Select", lambda: self.view.set_tool(ToolType.SELECTION), "S", True),
-            ("cutout", "toolbar_icon_cut", "Cutout", self.activate_cutout_tool, None, True),
-            ("move", "toolbar_icon_move", "Move", lambda: self.view.set_tool(ToolType.MOVE), None, True),
-            ("rotate", "toolbar_icon_rotate", "Rotate", lambda: self.view.set_tool(ToolType.ROTATE), None, True),
-            ("scale", "toolbar_icon_scale", "Scale", lambda: self.view.set_tool(ToolType.SCALE), None, True),
-            ("delete", "toolbar_icon_eraser", "Delete", self.delete_selected_items, None, True),
-            ("snap_grid", "toolbar_icon_snap_grid", "Snap Grid", lambda: self.view.set_tool(ToolType.ALIGN_GRID), None, True),
-            ("bring_forward", "toolbar_icon_bring_forward", "Bring Forward", lambda: self.adjust_layer_z(-1), None, True),
-            ("send_backward", "toolbar_icon_send_backward", "Send Backward", lambda: self.adjust_layer_z(1), None, True),
-            ("---separator1---", None, None, None, None, True),  # Separator marker
-            ("save_selected", "toolbar_icon_save_as", "Save Selected", self.save_selected_items, "Ctrl+Alt+S", True),
-            ("send_to_agent", "toolbar_icon_send_to_agent", "Send to Agent", self.send_to_agent, "Ctrl+Shift+A", True),
-            ("---separator_agent---", None, None, None, None, True),  # Separator marker
-            ("flatten_selected", "toolbar_icon_flatten_selected", "Flatten Selected", self.flatten_selected, None, True),
-            ("flatten_all", "toolbar_icon_flatten_all", "Flatten All", self.flatten_all, None, True),
-            ("---separator2---", None, None, None, None, True),  # Separator marker
-            ("rectangle", "toolbar_icon_rectangle", "Rectangle", lambda: self.view.set_tool(ToolType.RECTANGLE), None, True),
-            ("ellipse", "toolbar_icon_ellipse", "Ellipse", lambda: self.view.set_tool(ToolType.ELLIPSE), None, True),
-            ("arrow", "toolbar_icon_arrow", "Arrow", lambda: self.view.set_tool(ToolType.ARROW), "A", True),
-            ("step", "toolbar_icon_step", "Step", lambda: self.view.set_tool(ToolType.STEP), "N", True),
-            ("blur", "toolbar_icon_blur", "Blur", lambda: self.view.set_tool(ToolType.BLUR), "B", True),
-            ("highlight", "toolbar_icon_highlight", "Highlight", lambda: self.view.set_tool(ToolType.HIGHLIGHT), "H", True),
-            ("border", "toolbar_icon_border", "Border", lambda: self.view.set_tool(ToolType.BORDER), None, True),
-            ("colour_picker", "toolbar_icon_colour_picker", "Eyedropper", self.activate_colour_picker_tool, "I", True),
-            ("fill", "toolbar_icon_fill", "Fill", lambda: self.view.set_tool(ToolType.FILL), "F", True),
-            ("text", "toolbar_icon_text", "Text", lambda: self.view.set_tool(ToolType.TEXT), None, True),
+            ("pointer", "toolbar_icon_pointer", "Pointer", lambda: self.view.set_tool(ToolType.SELECT), None, True, True),
+            ("select", "toolbar_icon_selection", "Select", lambda: self.view.set_tool(ToolType.SELECTION), "S", True, True),
+            ("cutout", "toolbar_icon_cut", "Cutout", self.activate_cutout_tool, None, True, True),
+            ("move", "toolbar_icon_move", "Move", lambda: self.view.set_tool(ToolType.MOVE), None, True, True),
+            ("rotate", "toolbar_icon_rotate", "Rotate", lambda: self.view.set_tool(ToolType.ROTATE), None, True, True),
+            ("scale", "toolbar_icon_scale", "Scale", lambda: self.view.set_tool(ToolType.SCALE), None, True, True),
+            ("snap_grid", "toolbar_icon_snap_grid", "Snap Grid", lambda: self.view.set_tool(ToolType.ALIGN_GRID), None, True, True),
+            ("rectangle", "toolbar_icon_rectangle", "Rectangle", lambda: self.view.set_tool(ToolType.RECTANGLE), None, True, True),
+            ("ellipse", "toolbar_icon_ellipse", "Ellipse", lambda: self.view.set_tool(ToolType.ELLIPSE), None, True, True),
+            ("arrow", "toolbar_icon_arrow", "Arrow", lambda: self.view.set_tool(ToolType.ARROW), "A", True, True),
+            ("step", "toolbar_icon_step", "Step", lambda: self.view.set_tool(ToolType.STEP), "N", True, True),
+            ("blur", "toolbar_icon_blur", "Blur", lambda: self.view.set_tool(ToolType.BLUR), "B", True, True),
+            ("highlight", "toolbar_icon_highlight", "Highlight", lambda: self.view.set_tool(ToolType.HIGHLIGHT), "H", True, True),
+            ("border", "toolbar_icon_border", "Border", lambda: self.view.set_tool(ToolType.BORDER), None, True, True),
+            ("colour_picker", "toolbar_icon_colour_picker", "Eyedropper", self.activate_colour_picker_tool, "I", True, True),
+            ("fill", "toolbar_icon_fill", "Fill", lambda: self.view.set_tool(ToolType.FILL), "F", True, True),
+            ("text", "toolbar_icon_text", "Text", lambda: self.view.set_tool(ToolType.TEXT), None, True, True),
+            ("---separator_tools---", None, None, None, None, True, False),
+            ("delete", "toolbar_icon_eraser", "Delete", self.delete_selected_items, None, True, False),
+            ("bring_forward", "toolbar_icon_bring_forward", "Bring Forward", lambda: self.adjust_layer_z(-1), None, True, False),
+            ("send_backward", "toolbar_icon_send_backward", "Send Backward", lambda: self.adjust_layer_z(1), None, True, False),
+            ("---separator1---", None, None, None, None, True, False),
+            ("save_selected", "toolbar_icon_save_as", "Save Selected", self.save_selected_items, "Ctrl+Alt+S", True, False),
+            ("send_to_agent", "toolbar_icon_send_to_agent", "Send to Agent", self.send_to_agent, "Ctrl+Shift+A", True, False),
+            ("---separator_agent---", None, None, None, None, True, False),
+            ("flatten_selected", "toolbar_icon_flatten_selected", "Flatten Selected", self.flatten_selected, None, True, False),
+            ("flatten_all", "toolbar_icon_flatten_all", "Flatten All", self.flatten_all, None, True, False),
         ]
+
+        self._tool_action_group = QActionGroup(self)
+        self._tool_action_group.setExclusive(True)
+        self._tool_actions_by_type = {}
+        letter_tool_shortcuts = {}
         
         # Create actions and store them
-        for action_id, icon_name, text, callback, shortcut, is_core in core_actions:
+        for action_id, icon_name, text, callback, shortcut, is_core, is_tool in core_actions:
             if action_id.startswith("---"):
                 # This is a separator marker
                 self._toolbar_action_defs[action_id] = {
@@ -6384,10 +6852,15 @@ class MainWindow(QMainWindow):
                 }
             else:
                 action = QAction(self.get_icon_resource(icon_name), text, self)
-                if shortcut:
+                if shortcut and len(shortcut) > 1:
                     action.setShortcut(shortcut)
                 if callback:
                     action.triggered.connect(callback)
+                if is_tool:
+                    action.setCheckable(True)
+                    self._tool_action_group.addAction(action)
+                if shortcut and len(shortcut) == 1:
+                    letter_tool_shortcuts[shortcut] = callback
                 
                 self._toolbar_action_defs[action_id] = {
                     "id": action_id,
@@ -6396,7 +6869,52 @@ class MainWindow(QMainWindow):
                     "text": text,
                     "is_separator": False,
                     "is_core": is_core,
+                    "is_tool": is_tool,
                 }
+
+        tool_type_map = {
+            "pointer": ToolType.SELECT,
+            "select": ToolType.SELECTION,
+            "cutout": ToolType.CUTOUT,
+            "move": ToolType.MOVE,
+            "rotate": ToolType.ROTATE,
+            "scale": ToolType.SCALE,
+            "snap_grid": ToolType.ALIGN_GRID,
+            "rectangle": ToolType.RECTANGLE,
+            "ellipse": ToolType.ELLIPSE,
+            "arrow": ToolType.ARROW,
+            "step": ToolType.STEP,
+            "blur": ToolType.BLUR,
+            "highlight": ToolType.HIGHLIGHT,
+            "border": ToolType.BORDER,
+            "colour_picker": ToolType.COLOUR_PICKER,
+            "fill": ToolType.FILL,
+            "text": ToolType.TEXT,
+        }
+        for action_id, tool_type in tool_type_map.items():
+            action_def = self._toolbar_action_defs.get(action_id)
+            if action_def and action_def.get("action"):
+                self._tool_actions_by_type[tool_type] = action_def["action"]
+
+        # Single-letter tools: view-scoped shortcuts so text editing isn't hijacked.
+        if not hasattr(self, "_tool_letter_shortcuts"):
+            self._tool_letter_shortcuts = []
+        for sc in getattr(self, "_tool_letter_shortcuts", []):
+            sc.setParent(None)
+        self._tool_letter_shortcuts = []
+        for key, callback in letter_tool_shortcuts.items():
+            shortcut = QShortcut(QKeySequence(key), self.view)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+
+            def _make_handler(cb):
+                def handler():
+                    if self.view._is_text_editing_active():
+                        return
+                    cb()
+                return handler
+
+            shortcut.activated.connect(_make_handler(callback))
+            self._tool_letter_shortcuts.append(shortcut)
         
         # Set delete action shortcut (support both Delete and Backspace keys)
         if "delete" in self._toolbar_action_defs:
@@ -6405,6 +6923,9 @@ class MainWindow(QMainWindow):
                 QKeySequence(QKeySequence.StandardKey.Delete),
                 QKeySequence(Qt.Key.Key_Backspace)
             ])
+        pointer = self._toolbar_action_defs.get("pointer", {}).get("action")
+        if pointer:
+            pointer.setChecked(True)
     
     def _get_toolbar_order(self):
         """Get the toolbar order from settings or return default."""
@@ -6756,11 +7277,20 @@ class MainWindow(QMainWindow):
     def add_to_repository(self, item, thumbnail_source=None, thumbnail_pixmap=None, display_name=None):
         list_item = QListWidgetItem()
         pixmap = None
+        dpr = float(self.devicePixelRatioF()) if hasattr(self, "devicePixelRatioF") else 1.0
+        thumb_px = max(1, int(50 * dpr))
         if thumbnail_pixmap:
-            pixmap = thumbnail_pixmap.scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio)
+            pixmap = thumbnail_pixmap.scaled(
+                thumb_px, thumb_px, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
         elif thumbnail_source:
-            pixmap = QPixmap(thumbnail_source).scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio)
-        if pixmap:
+            pixmap = QPixmap(thumbnail_source).scaled(
+                thumb_px, thumb_px, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        if pixmap and not pixmap.isNull():
+            pixmap.setDevicePixelRatio(dpr)
             list_item.setIcon(QIcon(pixmap))
 
         if display_name:
@@ -7056,6 +7586,8 @@ class MainWindow(QMainWindow):
     def _notify_clipboard_image(self, label: str, image: QImage):
         message = f"{label} copied to clipboard as PNG ({image.width()}x{image.height()})"
         self._status_bar.showMessage(message, 5000)
+        if not sys.platform.startswith("linux"):
+            return
         notify_send = shutil.which("notify-send")
         if not notify_send:
             return
@@ -7227,6 +7759,8 @@ class MainWindow(QMainWindow):
         else:
             message = f"Image path copied to clipboard:\n{image_path}"
         self._status_bar.showMessage(message.replace("\n", " "), 7000)
+        if not sys.platform.startswith("linux"):
+            return
         notify_send = shutil.which("notify-send")
         if not notify_send:
             return

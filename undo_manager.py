@@ -8,8 +8,18 @@ across the entire application for every image edit.
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Optional, List, Callable
-from PyQt6.QtGui import QPixmap, QTransform
-from PyQt6.QtCore import QPointF, pyqtSignal, QObject
+from PyQt6.QtGui import QPixmap, QImage, QPainter
+from PyQt6.QtCore import QPointF, QRect, pyqtSignal, QObject
+
+
+DEFAULT_MAX_HISTORY = 100
+DEFAULT_MAX_BYTES = 512 * 1024 * 1024  # 512 MiB
+
+
+def _pixmap_byte_size(pixmap: Optional[QPixmap]) -> int:
+    if pixmap is None or pixmap.isNull():
+        return 0
+    return max(0, int(pixmap.width()) * int(pixmap.height()) * 4)
 
 
 class UndoableAction(ABC):
@@ -28,6 +38,10 @@ class UndoableAction(ABC):
     def undo(self) -> None:
         """Reverse the action."""
         pass
+
+    def approx_bytes(self) -> int:
+        """Approximate retained memory for history budgeting."""
+        return 0
 
 
 class ActionGroup(UndoableAction):
@@ -48,6 +62,9 @@ class ActionGroup(UndoableAction):
         for action in reversed(self.actions):
             action.undo()
 
+    def approx_bytes(self) -> int:
+        return sum(action.approx_bytes() for action in self.actions)
+
 
 class UndoManager(QObject):
     """Global undo/redo manager for all operations."""
@@ -58,11 +75,16 @@ class UndoManager(QObject):
     undoDescriptionChanged = pyqtSignal(str)
     redoDescriptionChanged = pyqtSignal(str)
     
-    def __init__(self, max_history: int = 100):
+    def __init__(
+        self,
+        max_history: int = DEFAULT_MAX_HISTORY,
+        max_bytes: int = DEFAULT_MAX_BYTES,
+    ):
         super().__init__()
         self._undo_stack: List[UndoableAction] = []
         self._redo_stack: List[UndoableAction] = []
         self._max_history = max_history
+        self._max_bytes = max(0, int(max_bytes))
         self._group_stack: List[ActionGroup] = []
     
     def execute(self, action: UndoableAction) -> None:
@@ -142,10 +164,20 @@ class UndoManager(QObject):
         self._redo_stack.clear()
         self._group_stack.clear()
         self._emit_state_changed()
+
+    def approx_bytes(self) -> int:
+        return sum(action.approx_bytes() for action in self._undo_stack) + sum(
+            action.approx_bytes() for action in self._redo_stack
+        )
     
     def _trim_history(self) -> None:
-        """Remove oldest actions if over limit."""
+        """Remove oldest actions if over count or byte budget."""
         while len(self._undo_stack) > self._max_history:
+            self._undo_stack.pop(0)
+        while (
+            len(self._undo_stack) > 1
+            and sum(a.approx_bytes() for a in self._undo_stack) > self._max_bytes
+        ):
             self._undo_stack.pop(0)
     
     def _emit_state_changed(self) -> None:
@@ -260,6 +292,46 @@ class ImageEditAction(UndoableAction):
         if hasattr(self.item, 'updateImageBytes'):
             self.item.updateImageBytes()
 
+    def approx_bytes(self) -> int:
+        return _pixmap_byte_size(self.old_pixmap) + _pixmap_byte_size(self.new_pixmap)
+
+
+class RegionImageEditAction(UndoableAction):
+    """Undo/redo a rectangular patch inside a raster item (cheaper than full frames)."""
+
+    def __init__(
+        self,
+        item,
+        rect: QRect,
+        old_patch: QImage,
+        new_patch: QImage,
+        description: str,
+    ):
+        super().__init__(description)
+        self.item = item
+        self.rect = QRect(rect)
+        self.old_patch = old_patch
+        self.new_patch = new_patch
+
+    def _paste(self, patch: QImage) -> None:
+        base = self.item.pixmap().toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        painter = QPainter(base)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.drawImage(self.rect.topLeft(), patch)
+        painter.end()
+        self.item.applyPixmapEdit(QPixmap.fromImage(base))
+
+    def execute(self) -> None:
+        self._paste(self.new_patch)
+
+    def undo(self) -> None:
+        self._paste(self.old_patch)
+
+    def approx_bytes(self) -> int:
+        old_b = 0 if self.old_patch.isNull() else self.old_patch.width() * self.old_patch.height() * 4
+        new_b = 0 if self.new_patch.isNull() else self.new_patch.width() * self.new_patch.height() * 4
+        return int(old_b + new_b)
+
 
 class PropertyChangeAction(UndoableAction):
     """Undo/redo any property change."""
@@ -281,13 +353,17 @@ class PropertyChangeAction(UndoableAction):
 class CallbackAction(UndoableAction):
     """Undo/redo using callbacks for custom behavior."""
     
-    def __init__(self, description: str, do_callback: Callable, undo_callback: Callable):
+    def __init__(self, description: str, do_callback: Callable, undo_callback: Callable, approx_bytes: int = 0):
         super().__init__(description)
         self._do = do_callback
         self._undo = undo_callback
+        self._approx_bytes = max(0, int(approx_bytes))
     
     def execute(self) -> None:
         self._do()
     
     def undo(self) -> None:
         self._undo()
+
+    def approx_bytes(self) -> int:
+        return self._approx_bytes

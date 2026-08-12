@@ -1,1 +1,2 @@
-PyQt6
+PyQt6>=6.6,<6.8
+pyinstaller>=6.3; sys_platform == "darwin"

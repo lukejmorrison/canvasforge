@@ -75,6 +75,9 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required but was not found
 command -v tar >/dev/null 2>&1 || die "tar is required but was not found"
 command -v install >/dev/null 2>&1 || die "install is required but was not found"
 if [[ "$(uname -s)" != "Linux" ]]; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        die "This installer targets Linux desktops. On macOS build the Intel .app with: bash scripts/build_macos_app.sh"
+    fi
     die "This installer targets Linux desktops."
 fi
 
