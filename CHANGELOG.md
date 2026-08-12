@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.9] - 2026-08-12 13:04
+- Performance: cache RasterItem QImage samples, lazy PNG `image_bytes`, viewport-grab magnifiers, blur bake cache, memoryview flood fill, thumbnail worker pool, adaptive zoom (animated zoom defaults off on macOS).
+- Undo: byte-budget history trim plus region fill undo patches to reduce RAM pressure on 8GB machines.
+- Selection tool: after marquee, open-hand drag clips the region live; release near the hole snaps/merges perfectly; Escape cancels; clip commits are undoable.
+- Usability: checkable tool group, tools-vs-actions toolbar order, view-scoped letter shortcuts, Retina DPR thumbs/cursors, Palette label fix.
+- macOS: menu roles (Preferences/About/Quit), Window menu, Linux-only integration gates, PyInstaller Intel x86_64 `.app`/DMG script (`scripts/build_macos_app.sh`), PyQt6 pinned `<6.8` for older Minis.
+
 ## [0.6.0-beta.8] - 2026-05-22
 
 ### Added

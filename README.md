@@ -67,6 +67,13 @@ pip install -r requirements.txt
 python main.py
 ```
 
+**macOS (Intel x86_64 .app for older Mac Minis)**
+```bash
+bash scripts/build_macos_app.sh
+open dist/CanvasForge.app
+```
+Build on macOS with a universal2 or Intel Python 3.11/3.12. The script pins PyQt6 `<6.8` (macOS 11+) and produces an ad-hoc-signed `.app` plus DMG under `dist/`. Apple Silicon can run the Intel build under Rosetta.
+
 ### Other Distributions
 
 **Flatpak**
@@ -104,6 +111,7 @@ The installer now auto-heals unhealthy virtual environments and retries Python d
 ## Usage Notes
 
 - Use the toolbar or keyboard shortcuts (`S` for select) to switch tools. Select supports click, Ctrl/Cmd-click toggles, Ctrl/Cmd+A select-all, and marquee selection that stays in sync with the layer list.
+- With the **Select** tool, draw a marquee on a raster image, then drag with the hand cursor to clip the region out. Release near the original hole to snap it back perfectly; release elsewhere to keep a new clipped layer (undoable). Escape cancels a lift.
 - Use **Eyedropper** (`I`) to choose the active fill colour with the canvas picker preview, then **Fill** (`F`) to bucket-fill a connected area inside a raster image layer. Hold Alt while clicking Eyedropper to use Omarchy's `hyprpicker` screen picker instead.
 - Use the right-side **Details - [Tool] Tool - Colour Selector Pallet** panel above Repository to pick Fill colours from swatches, choose a custom alpha-aware colour, or select Transparent for cutaway fills.
 - Use the **View** menu for zoom in/out, zoom to fit, actual size, shrink-to-fit, pixel grid, background color, sidebar visibility, and quick focus actions for Details, Library, and Recent Captures.

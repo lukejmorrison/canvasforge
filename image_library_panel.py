@@ -9,14 +9,27 @@ from PyQt6.QtCore import (
     QModelIndex,
     QObject,
     QRect,
+    QRunnable,
     QSortFilterProxyModel,
     QStandardPaths,
+    QThreadPool,
     Qt,
     QTimer,
     QSize,
     pyqtSignal,
 )
-from PyQt6.QtGui import QKeySequence, QShortcut, QPixmap, QPainter, QColor, QFont, QPen, QImage
+from PyQt6.QtGui import (
+    QKeySequence,
+    QShortcut,
+    QPixmap,
+    QPainter,
+    QColor,
+    QFont,
+    QPen,
+    QImage,
+    QImageReader,
+    QGuiApplication,
+)
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -68,6 +81,53 @@ def format_file_size(size_bytes: int) -> str:
     return f"{size_kb / 1024:.1f} MB"
 
 
+class _ThumbnailSignals(QObject):
+    finished = pyqtSignal(str, int, object)  # path, mtime, QImage|None
+
+
+class _ThumbnailJob(QRunnable):
+    def __init__(self, file_path: str, mtime: int, size: int, dpr: float, signals: _ThumbnailSignals):
+        super().__init__()
+        self.file_path = file_path
+        self.mtime = mtime
+        self.size = size
+        self.dpr = max(1.0, float(dpr))
+        self.signals = signals
+        self.setAutoDelete(True)
+
+    def run(self) -> None:
+        try:
+            reader = QImageReader(self.file_path)
+            if not reader.canRead():
+                self.signals.finished.emit(self.file_path, self.mtime, None)
+                return
+            target = int(self.size * self.dpr)
+            reader.setAutoTransform(True)
+            native = reader.size()
+            if native.isValid() and native.width() > 0 and native.height() > 0:
+                scaled_size = native.scaled(
+                    target, target, Qt.AspectRatioMode.KeepAspectRatio
+                )
+                reader.setScaledSize(scaled_size)
+            image = reader.read()
+            if image.isNull():
+                # Fallback: full decode then scale (SVG / odd formats).
+                image = QImage(self.file_path)
+                if image.isNull():
+                    self.signals.finished.emit(self.file_path, self.mtime, None)
+                    return
+                image = image.scaled(
+                    target,
+                    target,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            image.setDevicePixelRatio(self.dpr)
+            self.signals.finished.emit(self.file_path, self.mtime, image)
+        except Exception:
+            self.signals.finished.emit(self.file_path, self.mtime, None)
+
+
 class ThumbnailCache(QObject):
     """Background thumbnail generator with in-memory caching."""
     
@@ -77,10 +137,9 @@ class ThumbnailCache(QObject):
         super().__init__(parent)
         self._cache: Dict[Tuple[str, int], QPixmap] = {}  # (path, mtime) -> pixmap
         self._pending: Set[str] = set()  # Paths currently being generated
-        self._queue: List[str] = []  # Paths waiting to be generated
-        self._timer = QTimer(self)
-        self._timer.setInterval(10)  # Process queue every 10ms
-        self._timer.timeout.connect(self._process_queue)
+        self._pool = QThreadPool.globalInstance()
+        self._signals = _ThumbnailSignals(self)
+        self._signals.finished.connect(self._on_job_finished)
         self._placeholder: Optional[QPixmap] = None
     
     def get_thumbnail(self, file_path: str) -> Optional[QPixmap]:
@@ -101,10 +160,16 @@ class ThumbnailCache(QObject):
             return self._cache[cache_key]
         
         # Queue for background generation if not already pending
-        if file_path not in self._pending and file_path not in self._queue:
-            self._queue.append(file_path)
-            if not self._timer.isActive():
-                self._timer.start()
+        if file_path not in self._pending:
+            self._pending.add(file_path)
+            dpr = 1.0
+            app = QGuiApplication.instance()
+            if app is not None:
+                screen = app.primaryScreen()
+                if screen is not None:
+                    dpr = float(screen.devicePixelRatio())
+            job = _ThumbnailJob(file_path, mtime, THUMBNAIL_SIZE, dpr, self._signals)
+            self._pool.start(job)
         
         return self._get_placeholder()
     
@@ -118,66 +183,25 @@ class ThumbnailCache(QObject):
             painter.drawText(self._placeholder.rect(), Qt.AlignmentFlag.AlignCenter, "...")
             painter.end()
         return self._placeholder
-    
-    def _process_queue(self) -> None:
-        """Process one item from the thumbnail generation queue."""
-        if not self._queue:
-            self._timer.stop()
+
+    def _on_job_finished(self, file_path: str, mtime: int, image: object) -> None:
+        self._pending.discard(file_path)
+        if image is None or not isinstance(image, QImage) or image.isNull():
             return
-        
-        file_path = self._queue.pop(0)
-        self._pending.add(file_path)
-        
-        try:
-            self._generate_thumbnail(file_path)
-        finally:
-            self._pending.discard(file_path)
-    
-    def _generate_thumbnail(self, file_path: str) -> None:
-        """Generate and cache a thumbnail for the given file."""
-        path = Path(file_path)
-        if not path.exists():
-            return
-        
-        try:
-            mtime = int(path.stat().st_mtime)
-        except OSError:
-            return
-        
         cache_key = (file_path, mtime)
-        
-        # Skip if already cached (might have been added while in queue)
         if cache_key in self._cache:
             return
-        
-        # Load and scale the image
-        image = QImage(file_path)
-        if image.isNull():
-            return
-        
-        # Scale to thumbnail size maintaining aspect ratio
-        scaled = image.scaled(
-            THUMBNAIL_SIZE, THUMBNAIL_SIZE,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-        
-        pixmap = QPixmap.fromImage(scaled)
-        
-        # Evict oldest entries if cache is too large
+        pixmap = QPixmap.fromImage(image)
         if len(self._cache) >= MAX_CACHE_SIZE:
-            # Remove first 10% of entries
             keys_to_remove = list(self._cache.keys())[:MAX_CACHE_SIZE // 10]
             for key in keys_to_remove:
                 del self._cache[key]
-        
         self._cache[cache_key] = pixmap
         self.thumbnailReady.emit(file_path)
     
     def clear(self) -> None:
         """Clear the thumbnail cache."""
         self._cache.clear()
-        self._queue.clear()
         self._pending.clear()
 
 
@@ -477,8 +501,16 @@ class ImageLibraryPanel(QWidget):
         self.set_root_path(initial_root, persist=False)
     
     def _on_thumbnail_ready(self, file_path: str) -> None:
-        """Trigger view update when a thumbnail finishes loading."""
-        self.list_view.viewport().update()
+        """Trigger a per-row update when a thumbnail finishes loading."""
+        source_index = self._model.index(file_path)
+        if not source_index.isValid():
+            self.list_view.viewport().update()
+            return
+        proxy_index = self._proxy.mapFromSource(source_index)
+        if proxy_index.isValid():
+            self.list_view.update(proxy_index)
+        else:
+            self.list_view.viewport().update()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
