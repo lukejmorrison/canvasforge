@@ -5408,22 +5408,9 @@ class PreferencesDialog(QDialog):
         """Helper to find the actual path of an icon based on current theme."""
         theme = self.theme_combo.currentData()
         base_dir = Path(__file__).parent / "assets" / "toolbar_icons"
-        
-        # Theme search
-        if theme != "default":
-            theme_dir = base_dir / theme
-            if theme_dir.exists():
-                svg = theme_dir / f"{icon_name}.svg"
-                if svg.exists(): return str(svg)
-                png = theme_dir / f"{icon_name}.png"
-                if png.exists(): return str(png)
-        
-        # Default fallback
-        svg = base_dir / f"{icon_name}.svg"
-        if svg.exists(): return str(svg)
-        png = base_dir / f"{icon_name}.png"
-        if png.exists(): return str(png)
-        
+        path = resolve_toolbar_icon_file(base_dir, icon_name, theme)
+        if path is not None:
+            return str(path)
         return "Built-in / Missing"
 
     def _populate_toolbar_order_list(self):
@@ -6138,6 +6125,51 @@ class PreferencesDialog(QDialog):
         super().accept()
 
 
+TOOLBAR_ICON_ALIASES = {
+    "toolbar_icon_pointer": "toolbar_icon_pointer_cartoon",
+    "toolbar_icon_selection": "toolbar_icon_selection_cartoon",
+    "toolbar_icon_move": "toolbar_icon_move_cartoon",
+    "toolbar_icon_rotate": "toolbar_icon_rotate_cartoon",
+    "toolbar_icon_scale": "toolbar_icon_scale_cartoon",
+    "toolbar_icon_eraser": "toolbar_icon_eraser_cartoon",
+    "toolbar_icon_snap_grid": "toolbar_icon_snap_grid_cartoon",
+    "toolbar_icon_bring_forward": "toolbar_icon_bring_forward_cartoon",
+    "toolbar_icon_send_backward": "toolbar_icon_send_backward_cartoon",
+    "toolbar_icon_flatten_selected": "toolbar_icon_flatten_selected_cartoon",
+    "toolbar_icon_flatten_all": "toolbar_icon_flatten_all_cartoon",
+    "toolbar_icon_rectangle": "toolbar_icon_rectangle_cartoon",
+    "toolbar_icon_ellipse": "toolbar_icon_ellipse_cartoon",
+    "toolbar_icon_text": "toolbar_icon_text_cartoon",
+    "toolbar_icon_crop": "toolbar_icon_crop_cartoon",
+    "toolbar_icon_open": "toolbar_icon_open_cartoon",
+    "toolbar_icon_paste": "toolbar_icon_paste_cartoon",
+    "toolbar_icon_save_as": "toolbar_icon_save_as_cartoon",
+    "toolbar_icon_undo": "toolbar_icon_undo_cartoon",
+    "toolbar_icon_redo": "toolbar_icon_redo_cartoon",
+}
+
+
+def resolve_toolbar_icon_file(base_dir: Path, name: str, theme: str = "default"):
+    """Find a toolbar icon file, preferring canonical SVG over legacy cartoon aliases."""
+    candidates = [name]
+    alias = TOOLBAR_ICON_ALIASES.get(name)
+    if alias and alias not in candidates:
+        candidates.append(alias)
+
+    search_dirs = []
+    if theme and theme != "default":
+        search_dirs.append(base_dir / theme)
+    search_dirs.append(base_dir)
+
+    for directory in search_dirs:
+        for candidate in candidates:
+            for ext in (".svg", ".png"):
+                path = directory / f"{candidate}{ext}"
+                if path.exists():
+                    return path
+    return None
+
+
 class MainWindow(QMainWindow):
 
     def get_icon_resource(self, name):
@@ -6145,59 +6177,11 @@ class MainWindow(QMainWindow):
         Get an icon by name, respecting theme settings and prioritizing SVG.
         Falls back to placeholder if missing.
         """
-        icon_aliases = {
-            "toolbar_icon_pointer": "toolbar_icon_pointer_cartoon",
-            "toolbar_icon_selection": "toolbar_icon_selection_cartoon",
-            "toolbar_icon_move": "toolbar_icon_move_cartoon",
-            "toolbar_icon_rotate": "toolbar_icon_rotate_cartoon",
-            "toolbar_icon_scale": "toolbar_icon_scale_cartoon",
-            "toolbar_icon_eraser": "toolbar_icon_eraser_cartoon",
-            "toolbar_icon_snap_grid": "toolbar_icon_snap_grid_cartoon",
-            "toolbar_icon_bring_forward": "toolbar_icon_bring_forward_cartoon",
-            "toolbar_icon_send_backward": "toolbar_icon_send_backward_cartoon",
-            "toolbar_icon_flatten_selected": "toolbar_icon_flatten_selected_cartoon",
-            "toolbar_icon_flatten_all": "toolbar_icon_flatten_all_cartoon",
-            "toolbar_icon_rectangle": "toolbar_icon_rectangle_cartoon",
-            "toolbar_icon_ellipse": "toolbar_icon_ellipse_cartoon",
-            "toolbar_icon_text": "toolbar_icon_text_cartoon",
-            "toolbar_icon_crop": "toolbar_icon_crop_cartoon",
-            "toolbar_icon_open": "toolbar_icon_open_cartoon",
-            "toolbar_icon_paste": "toolbar_icon_paste_cartoon",
-            "toolbar_icon_save_as": "toolbar_icon_save_as_cartoon",
-            "toolbar_icon_undo": "toolbar_icon_undo_cartoon",
-            "toolbar_icon_redo": "toolbar_icon_redo_cartoon",
-        }
-        resolved_name = icon_aliases.get(name, name)
-
-        # Theme support
         theme = self.settings.value("appearance/icon_theme", "default")
         base_dir = Path(__file__).parent / "assets" / "toolbar_icons"
-        
-        # If using a theme, try that subfolder first
-        if theme != "default":
-            theme_dir = base_dir / theme
-            if theme_dir.exists():
-                # Try SVG (prioritized as per user request)
-                svg_path = theme_dir / f"{resolved_name}.svg"
-                if svg_path.exists():
-                    return QIcon(str(svg_path))
-                # Try PNG
-                png_path = theme_dir / f"{resolved_name}.png"
-                if png_path.exists():
-                    return QIcon(str(png_path))
-        
-        # Fallback to default assets
-        # Try SVG first
-        svg_path = base_dir / f"{resolved_name}.svg"
-        if svg_path.exists():
-            return QIcon(str(svg_path))
-        
-        # Try PNG
-        png_path = base_dir / f"{resolved_name}.png"
-        if png_path.exists():
-            return QIcon(str(png_path))
-            
-        # Placeholder generation
+        path = resolve_toolbar_icon_file(base_dir, name, theme)
+        if path is not None:
+            return QIcon(str(path))
         return self._create_placeholder_icon(name)
 
     def _create_placeholder_icon(self, text):

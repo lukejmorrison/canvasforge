@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <path d="M32 6 a18 18 0 1 1 -0.01 0 z M14 28 L32 60 L50 28 Z"
-        fill="#2a82da" stroke="#1f5f9e" stroke-width="2" stroke-linejoin="round"/>
-  <text x="32" y="32" font-family="Arial, sans-serif" font-weight="bold"
-        font-size="20" fill="white" text-anchor="middle"
-        dominant-baseline="central">1</text>
+  <title>Step — place a numbered step marker</title>
+  <defs>
+<linearGradient id="step-fill" x1="16" y1="10" x2="48" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#93c5fd"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  </defs>
+
+  <circle cx="32" cy="26" r="16" fill="url(#step-fill)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M22 40 L32 56 L42 40 Z" fill="url(#step-fill)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M27 22 L33.5 16 H37 V38 H31.5 V24 L27 26 Z" fill="#f8fafc"/>
+
 </svg>

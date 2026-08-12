@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Move — drag the selection in any direction</title>
+  <defs>
+<linearGradient id="move-fill" x1="32" y1="8" x2="32" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#7dd3fc"/></linearGradient>
+  </defs>
+
+  <path d="M32 8 L40 18 H35 V26 H48 L58 32 L48 38 H35 V46 H40 L32 56 L24 46 H29 V38 H16 L6 32 L16 26 H29 V18 H24 Z"
+        fill="url(#move-fill)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+</svg>

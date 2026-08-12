@@ -1,8 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <rect x="4" y="4" width="40" height="40" rx="3" fill="#f8fafc"/>
-  <path d="M31.5 9.5 38.5 16.5" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="round"/>
-  <path d="M15 35 29.5 20.5" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="round"/>
-  <path d="M17.5 37.5 32 23" fill="none" stroke="#f8fafc" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M24.5 15.5 33 24" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="round"/>
-  <path d="M13 37 8.5 39.5 11 35" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Eyedropper — sample a colour from the canvas</title>
+  <defs>
+<linearGradient id="drop-bulb" x1="24" y1="6" x2="36" y2="18" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fb7185"/><stop offset="1" stop-color="#f87171"/></linearGradient><linearGradient id="drop-tube" x1="26" y1="16" x2="34" y2="38" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#94a3b8"/></linearGradient><linearGradient id="drop-well" x1="40" y1="40" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#22c55e"/></linearGradient>
+  </defs>
+
+  <g transform="rotate(-45 30 28)">
+    <ellipse cx="30" cy="12" rx="6.5" ry="5.5" fill="url(#drop-bulb)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <rect x="26.5" y="16" width="7" height="22" rx="1.6" fill="url(#drop-tube)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M26.5 38 H33.5 L30 50 Z" fill="#334155" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <circle cx="48" cy="48" r="8" fill="url(#drop-well)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="48" cy="48" r="3.5" fill="#f8fafc" opacity="0.35"/>
+
 </svg>

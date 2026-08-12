@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Highlighted background sweep -->
-  <rect x="6" y="22" width="52" height="20" fill="#fff176" opacity="0.85"/>
-  <!-- Marker tip -->
-  <path d="M44 12 L56 24 L36 44 L24 32 Z"
-        fill="#ffd54f" stroke="#b8860b" stroke-width="2" stroke-linejoin="round"/>
-  <path d="M24 32 L36 44 L30 50 L18 38 Z"
-        fill="#8b6914" stroke="#5c4308" stroke-width="2" stroke-linejoin="round"/>
-  <line x1="14" y1="46" x2="22" y2="54" stroke="#3a3a3a" stroke-width="3" stroke-linecap="round"/>
+  <title>Highlight — mark a region with a highlighter</title>
+  <defs>
+<linearGradient id="hl-body" x1="36" y1="8" x2="49" y2="32" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#fbbf24"/></linearGradient>
+  </defs>
+
+  <path d="M8 20 H40" stroke="#94a3b8" stroke-width="2.3" stroke-linecap="round"/>
+  <path d="M8 44 H36" stroke="#94a3b8" stroke-width="2.3" stroke-linecap="round"/>
+  <rect x="8" y="27" width="30" height="11" rx="2" fill="#fbbf24" fill-opacity="0.9"/>
+  <g transform="rotate(-38 42 30)">
+    <rect x="36" y="8" width="13" height="24" rx="2.5" fill="url(#hl-body)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <rect x="36" y="18" width="13" height="4" fill="#f59e0b"/>
+    <rect x="38.5" y="32" width="8" height="6" rx="1" fill="#78350f" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M38.5 38 H46.5 L42.5 48 Z" fill="#451a03" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+
 </svg>

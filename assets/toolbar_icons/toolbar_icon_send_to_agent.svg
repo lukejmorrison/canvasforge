@@ -1,19 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Send to Agent — hand the image to an AI agent</title>
   <defs>
-    <linearGradient id="screen" x1="22" y1="24" x2="88" y2="96" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#9cc7ff"/>
-      <stop offset="1" stop-color="#4f7edc"/>
-    </linearGradient>
-    <linearGradient id="spark" x1="70" y1="30" x2="108" y2="86" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffe06b"/>
-      <stop offset="1" stop-color="#ff9f1c"/>
-    </linearGradient>
+<linearGradient id="agent-shot" x1="6" y1="28" x2="28" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#93c5fd"/><stop offset="1" stop-color="#818cf8"/></linearGradient><linearGradient id="agent-plane" x1="12" y1="12" x2="56" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#fb923c"/></linearGradient>
   </defs>
-  <rect x="16" y="30" width="62" height="48" rx="8" fill="url(#screen)" stroke="#d9ecff" stroke-width="5"/>
-  <rect x="35" y="84" width="72" height="12" rx="6" fill="#ffd34d"/>
-  <path d="M77 59h28" fill="none" stroke="url(#spark)" stroke-width="10" stroke-linecap="round"/>
-  <path d="M94 43l15 16-15 16" fill="none" stroke="url(#spark)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="32" cy="46" r="5" fill="#eff8ff"/>
-  <circle cx="47" cy="46" r="5" fill="#eff8ff"/>
-  <circle cx="62" cy="46" r="5" fill="#eff8ff"/>
+
+  <rect x="6" y="28" width="22" height="16" rx="3" fill="url(#agent-shot)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M10 40 C14 34 18 36 22 32" fill="none" stroke="#bfdbfe" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M12 36 L56 12 L30 40 L26 54 L30 40 L40 36 Z" fill="url(#agent-plane)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M30 40 L56 12" fill="none" stroke="#1c2030" stroke-width="2" stroke-linecap="round"/>
+  <path d="M50 8 L58 8 M54 4 L58 8 L54 12" fill="none" stroke="#fbbf24"
+        stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+
 </svg>

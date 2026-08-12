@@ -2,12 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.0-beta.9] - 2026-08-12 13:04
-- Performance: cache RasterItem QImage samples, lazy PNG `image_bytes`, viewport-grab magnifiers, blur bake cache, memoryview flood fill, thumbnail worker pool, adaptive zoom (animated zoom defaults off on macOS).
-- Undo: byte-budget history trim plus region fill undo patches to reduce RAM pressure on 8GB machines.
-- Selection tool: after marquee, open-hand drag clips the region live; release near the hole snaps/merges perfectly; Escape cancels; clip commits are undoable.
-- Usability: checkable tool group, tools-vs-actions toolbar order, view-scoped letter shortcuts, Retina DPR thumbs/cursors, Palette label fix.
-- macOS: menu roles (Preferences/About/Quit), Window menu, Linux-only integration gates, PyInstaller Intel x86_64 `.app`/DMG script (`scripts/build_macos_app.sh`), PyQt6 pinned `<6.8` for older Minis.
+## [0.6.0-beta.9] - 2026-08-12
+
+### Added
+- **Selection clip-snap:** After a marquee, open-hand drag clips the region live; release near the hole snaps/merges; Escape cancels; clip commits are undoable.
+- **macOS Mini packaging:** PyInstaller Intel x86_64 `.app`/DMG path (`scripts/build_macos_app.sh`) with PyQt6 pinned `<6.8` for older Minis, plus app menu roles and a Window menu.
+
+### Changed
+- **Forge toolbar icons:** Replaced the mixed default toolbar art with a consistent SVG + PNG set. Each glyph is drawn for the actual tool action (marquee select, cut-out, save selected, send to agent, flatten, eyedropper, fill, crop, callout, and the rest) and stays sharp from 24px through 64px.
+- **Plugin icons:** Crop and Callout now ship matching SVG + PNG assets so they follow the same family as the core toolbar.
+- **Performance:** Cache RasterItem QImage samples, lazy PNG `image_bytes`, viewport-grab magnifiers, blur bake cache, memoryview flood fill, thumbnail worker pool, and adaptive zoom (animated zoom defaults off on macOS).
+- **Undo memory:** Byte-budget history trim plus region fill undo patches to reduce RAM pressure on 8GB machines.
+- **Usability:** Checkable exclusive tool group, tools-before-actions toolbar order, view-scoped letter shortcuts, Retina DPR thumbs/cursors, and Palette label fix.
+
+### Fixed
+- **Icon theme loading:** Canonical `toolbar_icon_*` files now load before legacy `*_cartoon` aliases, so a new default pack is no longer silently ignored.
+
+### Security
+- **Plugins:** Reject path-traversal and absolute plugin IDs/entry points; user plugins default to disabled until explicitly enabled.
+- **Agent HTTP:** Allow HTTPS anywhere, cleartext HTTP only to loopback; block redirects on agent POST.
+- **Agent CLI:** Confirm before running the configured command template.
+- **Clipboard paste:** Write image/SVG paste assets under `$XDG_DATA_HOME/canvasforge/pasted_logs` instead of the working directory.
 
 ## [0.6.0-beta.8] - 2026-05-22
 

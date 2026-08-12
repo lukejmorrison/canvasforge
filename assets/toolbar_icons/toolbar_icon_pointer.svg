@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Pointer — click and select items</title>
+  <defs>
+<linearGradient id="pointer-fill" x1="18" y1="12" x2="46" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#c7d2fe"/></linearGradient>
+  </defs>
+
+  <path d="M18 12 L18 50 L28 40 L35 56 L43 52.5 L36 37 L50 37 Z"
+        fill="url(#pointer-fill)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M22 18 L22 36 L28 31" fill="#7dd3fc" opacity="0.45"/>
+
+</svg>
