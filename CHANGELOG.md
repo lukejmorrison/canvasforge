@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-beta.10] - 2026-08-12
+
+### Fixed
+- **Select tool hang on Wayland:** Marquee Select no longer lets transform handles steal the first click, and magnifiers render a scene crop instead of `viewport.grab()` (which re-entered paint and spun the CPU).
+
 ## [0.6.0-beta.9] - 2026-08-12
 
 ### Added

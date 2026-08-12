@@ -35,7 +35,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QMessageBox, QGraphicsBlurEffect, QSlider, QScrollArea, QButtonGroup)
 import shutil
 
-__version__ = "0.6.0-beta.9"
+__version__ = "0.6.0-beta.10"
 CLIPBOARD_JPEG_MAX_SIDE = 1440
 CLIPBOARD_JPEG_QUALITY = 88
 
@@ -1826,38 +1826,27 @@ class CanvasBoundsItem(QGraphicsRectItem):
         self.finish_resize()
 
 
-def _magnifier_grab_viewport(view, view_pos, source_radius_px, target_rect, painter):
-    """Paint a zoomed viewport grab into target_rect (avoids full scene.render)."""
-    viewport = view.viewport()
+def _magnifier_render_scene(view, scene_pos, source_radius_px, target_rect, painter):
+    """Paint a zoomed scene crop into target_rect.
+
+    Avoid QWidget.grab(): magnifiers are children of the viewport, so grabbing
+    during paintEvent re-enters painting on Wayland and can hang the UI.
+    """
     grab_r = max(4, int(source_radius_px))
-    src = QRect(
-        int(view_pos.x()) - grab_r,
-        int(view_pos.y()) - grab_r,
+    source = QRectF(
+        float(scene_pos.x()) - grab_r,
+        float(scene_pos.y()) - grab_r,
         grab_r * 2,
         grab_r * 2,
     )
-    # Expand grab to stay within viewport; pad with background if near edges.
-    vp_rect = viewport.rect()
-    clipped = src.intersected(vp_rect)
-    if clipped.isEmpty():
-        return False
-    grabbed = viewport.grab(clipped)
-    if grabbed.isNull():
-        return False
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-    # Map the clipped grab into target_rect proportionally to the full source square.
-    sx = (clipped.x() - src.x()) / max(1, src.width())
-    sy = (clipped.y() - src.y()) / max(1, src.height())
-    sw = clipped.width() / max(1, src.width())
-    sh = clipped.height() / max(1, src.height())
-    dest = QRectF(
-        target_rect.x() + sx * target_rect.width(),
-        target_rect.y() + sy * target_rect.height(),
-        sw * target_rect.width(),
-        sh * target_rect.height(),
-    )
     painter.fillRect(target_rect, view.backgroundBrush())
-    painter.drawPixmap(dest, grabbed, QRectF(grabbed.rect()))
+    view.scene().render(
+        painter,
+        target_rect,
+        source,
+        Qt.AspectRatioMode.IgnoreAspectRatio,
+    )
     return True
 
 
@@ -1900,16 +1889,9 @@ class SelectionMagnifier(QWidget):
         path = QPainterPath()
         path.addEllipse(outer)
         painter.setClipPath(path)
-        if not _magnifier_grab_viewport(
-            self.view, self._view_pos, self._source_radius, outer, painter
-        ):
-            source = QRectF(
-                self._scene_pos.x() - self._source_radius,
-                self._scene_pos.y() - self._source_radius,
-                self._source_radius * 2,
-                self._source_radius * 2,
-            )
-            self.view.scene().render(painter, outer, source)
+        _magnifier_render_scene(
+            self.view, self._scene_pos, self._source_radius, outer, painter
+        )
         painter.setClipping(False)
         painter.setPen(QPen(QColor("#111827"), 3))
         painter.drawEllipse(outer)
@@ -1969,16 +1951,9 @@ class ColourPickerMagnifier(QWidget):
         path.addRoundedRect(outer, 4, 4)
         painter.setClipPath(path)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-        if not _magnifier_grab_viewport(
-            self.view, self._view_pos, self._source_radius, outer, painter
-        ):
-            source = QRectF(
-                self._scene_pos.x() - self._source_radius,
-                self._scene_pos.y() - self._source_radius,
-                self._source_radius * 2,
-                self._source_radius * 2,
-            )
-            self.view.scene().render(painter, outer, source)
+        _magnifier_render_scene(
+            self.view, self._scene_pos, self._source_radius, outer, painter
+        )
         painter.setClipping(False)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(QPen(QColor("#1f2937"), 2))
@@ -2902,6 +2877,9 @@ class CanvasView(QGraphicsView):
         if self.current_tool == ToolType.CUTOUT and tool != ToolType.CUTOUT:
             self._cancel_cutout_mode()
         self.current_tool = tool
+        if tool == ToolType.SELECTION:
+            # Transform handles sit on top of the raster and steal marquee clicks.
+            self.scene().clearSelection()
         if tool == ToolType.SELECT:
             self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         else:
@@ -3193,9 +3171,16 @@ class CanvasView(QGraphicsView):
             if self._active_plugin_tool._on_view_mouse_press(event):
                 return
 
+        drawing_over_handles = self.current_tool in (
+            ToolType.SELECTION,
+            ToolType.CUTOUT,
+            ToolType.COLOUR_PICKER,
+            ToolType.FILL,
+        )
         if isinstance(clicked_item, (ResizeHandle, RotateHandle, CanvasResizeHandle)):
-            super().mousePressEvent(event)
-            return
+            if not drawing_over_handles:
+                super().mousePressEvent(event)
+                return
 
         if self.current_tool == ToolType.SELECTION:
             self._handle_selection_press(event, scene_pos, clicked_item)
@@ -4155,15 +4140,22 @@ class CanvasView(QGraphicsView):
                 event.accept()
                 self._apply_cursor()
                 return
-        if isinstance(clicked_item, RasterItem):
-            if self._selection_host and self._selection_host is not clicked_item:
+        raster = clicked_item if isinstance(clicked_item, RasterItem) else None
+        if raster is None and isinstance(clicked_item, (ResizeHandle, RotateHandle)):
+            owner = getattr(clicked_item, "parent_item", None)
+            if isinstance(owner, RasterItem):
+                raster = owner
+        if raster is None:
+            raster = self._raster_item_at_scene_pos(scene_pos, clicked_item)
+        if isinstance(raster, RasterItem):
+            if self._selection_host and self._selection_host is not raster:
                 self._selection_host.clearSelectionOverlay()
-            elif overlay and self._selection_host is clicked_item and locked:
+            elif overlay and self._selection_host is raster and locked:
                 # Click outside the locked marquee on the same raster → new marquee.
                 self._selection_host.clearSelectionOverlay()
             elif overlay:
                 self._selection_host.clearSelectionOverlay()
-            self._selection_host = clicked_item
+            self._selection_host = raster
             self.scene().clearSelection()
             self._selection_host.startSelectionOverlay(scene_pos)
             self._selection_creating = True
@@ -4748,23 +4740,23 @@ class CanvasView(QGraphicsView):
     def _apply_cursor(self):
         if self.current_tool == ToolType.SELECTION:
             if self._selection_carry_active:
-                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                cursor = Qt.CursorShape.ClosedHandCursor
             elif self._selection_creating or not self._selection_host:
-                self.setCursor(Qt.CursorShape.CrossCursor)
+                cursor = Qt.CursorShape.CrossCursor
             elif self._selection_host and self._selection_host.hasSelectionOverlay():
-                self.setCursor(Qt.CursorShape.OpenHandCursor)
+                cursor = Qt.CursorShape.OpenHandCursor
             else:
-                self.setCursor(Qt.CursorShape.CrossCursor)
+                cursor = Qt.CursorShape.CrossCursor
         elif self.current_tool == ToolType.CUTOUT:
-            self.setCursor(Qt.CursorShape.CrossCursor)
+            cursor = Qt.CursorShape.CrossCursor
         elif self.current_tool == ToolType.COLOUR_PICKER:
-            self.setCursor(self._eyedropper_cursor())
+            cursor = self._eyedropper_cursor()
         elif self.current_tool == ToolType.FILL:
-            self.setCursor(self._fill_colour_cursor())
-        elif self.current_tool == ToolType.SELECT:
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+            cursor = self._fill_colour_cursor()
         else:
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+            cursor = Qt.CursorShape.ArrowCursor
+        self.setCursor(cursor)
+        self.viewport().setCursor(cursor)
 
     def _eyedropper_cursor(self):
         if hasattr(self, "_cached_eyedropper_cursor"):
