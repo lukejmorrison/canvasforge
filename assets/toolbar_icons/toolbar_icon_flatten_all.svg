@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Flatten All — merge every layer into one</title>
+  <defs>
+<linearGradient id="fa-base" x1="14" y1="34" x2="50" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#94a3b8"/></linearGradient>
+  </defs>
+
+  <path d="M32 6 V14" fill="none" stroke="#fbbf24" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M32 18 L25 10 H39 Z" fill="#fbbf24" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="18" y="22" width="28" height="8" rx="2" fill="#93c5fd" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="16" y="28" width="32" height="8" rx="2" fill="#60a5fa" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="14" y="34" width="36" height="10" rx="2.5" fill="url(#fa-base)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M32 58 V50" fill="none" stroke="#fbbf24" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M32 46 L25 54 H39 Z" fill="#fbbf24" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+
+</svg>

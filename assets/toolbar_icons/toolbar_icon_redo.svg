@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Redo — restore the last undone action</title>
+  <defs>
+<linearGradient id="redo-arc" x1="14" y1="16" x2="52" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#22c55e"/></linearGradient>
+  </defs>
+
+  <path d="M18 40 A16 16 0 1 1 44 24" fill="none" stroke="url(#redo-arc)"
+        stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M44 24 L54 22 L46 14 Z" fill="#4ade80" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+
+</svg>

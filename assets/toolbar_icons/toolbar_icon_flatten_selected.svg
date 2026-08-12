@@ -1,4 +1,17 @@
-<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg">
- <rect width="64" height="64" rx="10" ry="10" fill="#555555"/>
- <text x="32" y="40" font-family="Arial" font-size="40" fill="#aaaaaa" text-anchor="middle" dominant-baseline="middle">?</text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Flatten Selected — merge the chosen layers</title>
+  <defs>
+<linearGradient id="fs-top" x1="16" y1="24" x2="48" y2="34" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#bfdbfe"/><stop offset="1" stop-color="#60a5fa"/></linearGradient><linearGradient id="fs-bot" x1="16" y1="32" x2="48" y2="42" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cbd5e1"/><stop offset="1" stop-color="#64748b"/></linearGradient>
+  </defs>
+
+  <rect x="11" y="10" width="42" height="44" rx="4" fill="none"
+        stroke="#7dd3fc" stroke-width="1.8" stroke-dasharray="4 2.5"/>
+  <path d="M32 8 V16" fill="none" stroke="#fbbf24" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M32 20 L25 12 H39 Z" fill="#fbbf24" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="16" y="24" width="32" height="10" rx="2" fill="url(#fs-top)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="16" y="32" width="32" height="10" rx="2" fill="url(#fs-bot)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M32 56 V48" fill="none" stroke="#fbbf24" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M32 44 L25 52 H39 Z" fill="#fbbf24" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+
 </svg>

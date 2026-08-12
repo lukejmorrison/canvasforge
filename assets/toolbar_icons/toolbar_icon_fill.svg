@@ -1,7 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <rect x="4" y="4" width="40" height="40" rx="3" fill="#f8fafc"/>
-  <path d="M16 13 30 27 20 37 6 23Z" fill="#7c8a95" stroke="#3f4a54" stroke-width="2.5" stroke-linejoin="round"/>
-  <path d="M17 11 31 25" fill="none" stroke="#3f4a54" stroke-width="3" stroke-linecap="round"/>
-  <path d="M10 24H25" fill="none" stroke="#eef2f7" stroke-width="2" stroke-linecap="round"/>
-  <path d="M34 28C38 33 40 36 40 39.5 40 42.5 37.8 44.5 35 44.5S30 42.5 30 39.5C30 36 32 33 34 28Z" fill="#5f6f7b" stroke="#3f4a54" stroke-width="2"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Fill — flood-fill a connected colour region</title>
+  <defs>
+<linearGradient id="fill-body" x1="16" y1="18" x2="40" y2="46" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cbd5e1"/><stop offset="1" stop-color="#64748b"/></linearGradient><linearGradient id="fill-paint" x1="16" y1="18" x2="54" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  </defs>
+
+  <g transform="rotate(28 28 30)">
+    <path d="M22 12 A8 8 0 0 1 38 12" fill="none" stroke="#94a3b8" stroke-width="3.4"
+          stroke-linecap="round"/>
+    <path d="M16 18 H40 L36 46 H20 Z" fill="url(#fill-body)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M16 18 H40 L38 26 H18 Z" fill="url(#fill-paint)" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <path d="M46 36 C54 44 54 52 48 56 C40 54 42 46 46 36 Z" fill="url(#fill-paint)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
 </svg>

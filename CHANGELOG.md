@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-08-12 20:15] Forge toolbar icon set
+
+### Changed
+- **Forge toolbar icons:** Replaced the mixed default toolbar art with a consistent SVG + PNG set. Each glyph is drawn for the actual tool action (marquee select, cut-out, save selected, send to agent, flatten, eyedropper, fill, crop, callout, and the rest) and stays sharp from 24px through 64px.
+- **Plugin icons:** Crop and Callout now ship matching SVG + PNG assets so they follow the same family as the core toolbar.
+
+### Fixed
+- **Icon theme loading:** Canonical `toolbar_icon_*` files now load before legacy `*_cartoon` aliases, so a new default pack is no longer silently ignored.
+
 ## [0.6.0-beta.8] - 2026-05-22
 
 ### Added

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Paste — place clipboard contents on the canvas</title>
+  <defs>
+<linearGradient id="paste-board" x1="16" y1="16" x2="48" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#e2e8f0"/></linearGradient><linearGradient id="paste-img" x1="22" y1="26" x2="42" y2="42" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#93c5fd"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="32" height="40" rx="4" fill="url(#paste-board)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="24" y="10" width="16" height="10" rx="3" fill="#94a3b8" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="22" y="26" width="20" height="16" rx="2" fill="url(#paste-img)" stroke="#1c2030" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+
+</svg>

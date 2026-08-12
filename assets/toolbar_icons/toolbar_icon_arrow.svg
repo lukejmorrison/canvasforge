@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <line x1="10" y1="50" x2="44" y2="18"
-        stroke="#dc3232" stroke-width="6" stroke-linecap="round"/>
-  <polygon points="54,8 32,14 48,28"
-           fill="#dc3232" stroke="#dc3232" stroke-width="2" stroke-linejoin="round"/>
+  <title>Arrow — draw a pointing annotation arrow</title>
+  <defs>
+<linearGradient id="arrow-fill" x1="12" y1="50" x2="54" y2="12" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ef4444"/><stop offset="1" stop-color="#fb7185"/></linearGradient>
+  </defs>
+
+  <path d="M12 50 L34 28 L28 26 L54 12 L40 38 L38 32 Z"
+        fill="url(#arrow-fill)" stroke="#1c2030" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
 </svg>
