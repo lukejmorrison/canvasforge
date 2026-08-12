@@ -23,7 +23,6 @@ package() {
     AGENT.md \
     CHANGELOG.md \
     README.md \
-    SKILL.md \
     TODO.md \
     artifacts \
     assets \
@@ -49,7 +48,7 @@ Comment=Remix screenshots, snippets, and vectors
 Exec=canvasforge
 Icon=canvasforge
 Terminal=false
-Categories=Graphics;AudioVideo;
+Categories=Graphics;
 EOF
 
   install -Dm644 \

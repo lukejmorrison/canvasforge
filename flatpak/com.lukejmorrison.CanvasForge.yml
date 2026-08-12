@@ -26,10 +26,12 @@ modules:
       - mkdir -p /app/share/canvasforge
       - install -Dm644 main.py /app/share/canvasforge/main.py
       - install -Dm644 image_library_panel.py /app/share/canvasforge/image_library_panel.py
+      - install -Dm644 plugin_manager.py /app/share/canvasforge/plugin_manager.py
+      - install -Dm644 undo_manager.py /app/share/canvasforge/undo_manager.py
       - install -Dm644 requirements.txt /app/share/canvasforge/requirements.txt
       - cp -r assets /app/share/canvasforge/
+      - cp -r plugins /app/share/canvasforge/
       - if [ -d artifacts ]; then cp -r artifacts /app/share/canvasforge/; fi
-      - if [ -d pasted_logs ]; then cp -r pasted_logs /app/share/canvasforge/; fi
       - python3 -m venv /app/canvasforge-venv
       - if [ -d flatpak/vendor ]; then cp -r flatpak/vendor /app/share/canvasforge/vendor; fi
       - source /app/canvasforge-venv/bin/activate && pip install --no-cache-dir --no-index --find-links /app/share/canvasforge/vendor/wheels -r /app/share/canvasforge/requirements.txt

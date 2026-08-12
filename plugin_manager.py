@@ -410,18 +410,50 @@ class PluginManager(QObject):
         
         return manifests
     
+    @staticmethod
+    def _is_safe_plugin_id(plugin_id: str) -> bool:
+        """Reject absolute paths, parent traversal, and empty IDs."""
+        if not plugin_id or plugin_id in (".", ".."):
+            return False
+        path = Path(plugin_id)
+        if path.is_absolute() or path.anchor:
+            return False
+        return all(part not in ("", ".", "..") for part in path.parts)
+
+    @staticmethod
+    def _is_within_directory(path: Path, root: Path) -> bool:
+        """Return True if resolved path is inside resolved root."""
+        try:
+            path.resolve(strict=False).relative_to(root.resolve(strict=False))
+            return True
+        except (ValueError, OSError):
+            return False
+
     def load_plugin(self, plugin_id: str) -> bool:
         """Load a plugin by ID."""
         if plugin_id in self._plugins:
             return True  # Already loaded
+
+        if not self._is_safe_plugin_id(plugin_id):
+            self.pluginError.emit(plugin_id, f"Invalid plugin id: {plugin_id}")
+            return False
         
         # Find the plugin directory
         plugin_path = None
+        plugin_root = None
         for plugin_dir in [self._builtin_plugin_dir, self._user_plugin_dir]:
             candidate = plugin_dir / plugin_id
-            if candidate.exists() and (candidate / "manifest.json").exists():
-                plugin_path = candidate
-                break
+            if not candidate.exists() or not (candidate / "manifest.json").exists():
+                continue
+            if not self._is_within_directory(candidate, plugin_dir):
+                self.pluginError.emit(
+                    plugin_id,
+                    f"Plugin path escapes plugin root: {candidate}",
+                )
+                return False
+            plugin_path = candidate
+            plugin_root = plugin_dir
+            break
         
         if not plugin_path:
             self.pluginError.emit(plugin_id, f"Plugin directory not found: {plugin_id}")
@@ -431,9 +463,24 @@ class PluginManager(QObject):
             # Load manifest
             with open(plugin_path / "manifest.json", 'r') as f:
                 manifest = PluginManifest.from_dict(json.load(f))
+
+            if not self._is_safe_plugin_id(manifest.entry_point.replace("\\", "/")):
+                loaded = LoadedPlugin(
+                    manifest=manifest,
+                    path=plugin_path,
+                    enabled=False,
+                    error=f"Unsafe entry point: {manifest.entry_point}",
+                )
+                self._plugins[plugin_id] = loaded
+                self.pluginError.emit(plugin_id, loaded.error)
+                return False
             
-            # Check if disabled in settings
-            enabled = self._settings.value(f"{plugin_id}/enabled", True, type=bool)
+            # Builtin plugins default on; user plugins must be explicitly enabled
+            is_user_plugin = plugin_root == self._user_plugin_dir
+            default_enabled = not is_user_plugin
+            enabled = self._settings.value(
+                f"{plugin_id}/enabled", default_enabled, type=bool
+            )
             
             # Create LoadedPlugin entry
             loaded = LoadedPlugin(
@@ -447,7 +494,12 @@ class PluginManager(QObject):
                 return True
             
             # Load the Python module
-            entry_file = plugin_path / manifest.entry_point
+            entry_file = (plugin_path / manifest.entry_point).resolve(strict=False)
+            if not self._is_within_directory(entry_file, plugin_path):
+                loaded.error = f"Entry point escapes plugin directory: {manifest.entry_point}"
+                self._plugins[plugin_id] = loaded
+                self.pluginError.emit(plugin_id, loaded.error)
+                return False
             if not entry_file.exists():
                 loaded.error = f"Entry point not found: {manifest.entry_point}"
                 self._plugins[plugin_id] = loaded

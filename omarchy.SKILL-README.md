@@ -1,1 +1,0 @@
-/home/luke/dev/template_skills/omarchy.SKILL-README.md

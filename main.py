@@ -4,6 +4,13 @@ import subprocess
 import os
 import time
 import math
+import base64
+import json
+import shlex
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
 
 # Force X11 backend on Wayland+NVIDIA to prevent compositor lockups
 # See: featurerequest/ProblemLog_WaylandCosmicLockup.md
@@ -35,6 +42,40 @@ CLIPBOARD_JPEG_QUALITY = 88
 # Supported image extensions for CLI opening (screenshot editor integration, drag/drop, etc.)
 SUPPORTED_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg')
 
+
+def pasted_logs_dir() -> Path:
+    """Return a writable app data dir for pasted clipboard assets (not CWD)."""
+    xdg_data = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg_data) if xdg_data else Path.home() / ".local" / "share"
+    path = base / "canvasforge" / "pasted_logs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def is_allowed_agent_http_endpoint(endpoint: str) -> tuple[bool, str]:
+    """Allow HTTPS anywhere, or cleartext HTTP only to loopback."""
+    parsed = urllib.parse.urlparse(endpoint)
+    if parsed.scheme not in ("http", "https"):
+        return False, "Agent HTTP endpoint must use http:// or https://"
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False, "Agent HTTP endpoint is missing a hostname"
+    if parsed.scheme == "http" and host not in ("127.0.0.1", "localhost", "::1"):
+        return False, (
+            "Cleartext HTTP agent endpoints are limited to localhost "
+            "(127.0.0.1, localhost, ::1). Use HTTPS for remote hosts."
+        )
+    return True, ""
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Reject HTTP redirects so agent POSTs cannot be steered off-host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            newurl, code, f"Redirects are not allowed for agent HTTP POST ({code})", headers, fp
+        )
+
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
@@ -43,7 +84,6 @@ from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QPainter, QIcon, QPen, 
                      QFontMetrics, QPainterPath, QPolygonF, QCursor)
 from PyQt6.QtCore import (Qt, QTimer, QPointF, QPoint, pyqtSignal, QRectF, QSize, QSettings, 
                           QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl)
-from pathlib import Path
 import datetime
 from image_library_panel import ImageLibraryPanel
 from undo_manager import UndoManager, CallbackAction, ImageEditAction
@@ -3740,9 +3780,10 @@ class CanvasView(QGraphicsView):
         if self._try_paste_from_urls(mime_data, scene_pos):
             return True
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        paste_dir = pasted_logs_dir()
         if mime_data.hasFormat('image/svg+xml'):
             svg_data = mime_data.data('image/svg+xml')
-            log_path = f"pasted_logs/svg_{timestamp}.svg"
+            log_path = str(paste_dir / f"svg_{timestamp}.svg")
             with open(log_path, 'wb') as f:
                 f.write(svg_data)
             print(f"Logged SVG to {log_path}")
@@ -3755,7 +3796,7 @@ class CanvasView(QGraphicsView):
         if mime_data.hasImage():
             image = mime_data.imageData()
             pixmap = QPixmap.fromImage(image)
-            log_path = f"pasted_logs/image_{timestamp}.png"
+            log_path = str(paste_dir / f"image_{timestamp}.png")
             pixmap.save(log_path)
             print(f"Logged image to {log_path}")
             item = RasterItem(pixmap)
@@ -3767,10 +3808,7 @@ class CanvasView(QGraphicsView):
             text = mime_data.text()
             if self._try_paste_path_from_text(text, scene_pos):
                 return True
-            log_path = f"pasted_logs/text_{timestamp}.txt"
-            with open(log_path, 'w') as f:
-                f.write(text)
-            print(f"Logged text to {log_path}")
+            # Do not persist clipboard text to disk (may contain secrets).
             text_item = CanvasTextItem(text)
             text_item.setPos(scene_pos)
             text_item.setFont(QFont("Arial", 12))
@@ -7364,6 +7402,10 @@ class MainWindow(QMainWindow):
 
         endpoint = str(self.settings.value("agent/http_endpoint", "") or "").strip()
         if endpoint:
+            allowed, reason = is_allowed_agent_http_endpoint(endpoint)
+            if not allowed:
+                QMessageBox.warning(self, "Agent HTTP endpoint blocked", reason)
+                return
             self._post_bundle_to_agent(endpoint, target, prompt, png_path, json_path, bundle_dir)
             return
 
@@ -7386,9 +7428,29 @@ class MainWindow(QMainWindow):
             dir=str(bundle_dir),
             agent=target,
         )
-        import shlex
         try:
             cmd = shlex.split(command)
+        except ValueError as exc:
+            QMessageBox.warning(
+                self,
+                "Agent command error",
+                f"Could not parse the Agent command template:\n\n{exc}\n\nBundle: {bundle_dir}",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Agent command",
+            "Run this Agent command?\n\n"
+            f"{' '.join(cmd)}\n\n"
+            f"Bundle: {bundle_dir}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
             subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
@@ -7405,12 +7467,6 @@ class MainWindow(QMainWindow):
                 f"Could not run '{cmd[0]}'. Set the command in Preferences → Agent. "
                 f"The annotation bundle is still "
                 f"available at:\n\n{bundle_dir}",
-            )
-        except ValueError as exc:
-            QMessageBox.warning(
-                self,
-                "Agent command error",
-                f"Could not parse the Agent command template:\n\n{exc}\n\nBundle: {bundle_dir}",
             )
 
     def _send_to_vscode_codex(self, prompt, png_path, json_path, bundle_dir):
@@ -7456,9 +7512,10 @@ class MainWindow(QMainWindow):
             )
 
     def _post_bundle_to_agent(self, endpoint, target, prompt, png_path, json_path, bundle_dir):
-        import base64
-        import json
-        import urllib.request
+        allowed, reason = is_allowed_agent_http_endpoint(endpoint)
+        if not allowed:
+            QMessageBox.warning(self, "Agent HTTP endpoint blocked", reason)
+            return
         payload = {
             "source": "CanvasForge",
             "target": target,
@@ -7475,8 +7532,9 @@ class MainWindow(QMainWindow):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        opener = urllib.request.build_opener(_NoRedirect)
         try:
-            urllib.request.urlopen(request, timeout=15).read()
+            opener.open(request, timeout=15).read()
             self._status_bar.showMessage(
                 f"Posted selected image to {target} via {endpoint}", 8000
             )
