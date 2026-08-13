@@ -1094,6 +1094,7 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
         self.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         self.document().contentsChanged.connect(self._update_transform_origin)
         self._box_height = max(36.0, QGraphicsTextItem.boundingRect(self).height())
+        self._user_box_height = False
         self._update_transform_origin()
 
     def boundingRect(self):
@@ -1231,8 +1232,10 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
             font.setPointSizeF(new_size)
             self.setFont(font)
             self.prepareGeometryChange()
+            self.setTextWidth(max(24.0, self._rs_start_width * factor))
             native = QGraphicsTextItem.boundingRect(self)
             self._box_height = max(16.0, native.height())
+            self._user_box_height = False
             br = self.sceneBoundingRect()
             if idx == 0:
                 self._set_scene_top_left(QPointF(start_rect.right() - br.width(), start_rect.bottom() - br.height()))
@@ -1247,10 +1250,14 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
             self.prepareGeometryChange()
             if width_changes:
                 self.setTextWidth(max(24.0, resized.width()))
+            native_h = QGraphicsTextItem.boundingRect(self).height()
             if height_changes:
                 self._box_height = max(16.0, resized.height())
+                self._user_box_height = True
+            elif getattr(self, "_user_box_height", False):
+                self._box_height = max(native_h, self._rs_start_height)
             else:
-                self._box_height = max(float(getattr(self, "_box_height", 0) or 0), self._rs_start_height)
+                self._box_height = max(16.0, native_h)
             self._set_scene_top_left(resized.topLeft())
         self._update_transform_origin()
         if getattr(self, "handles", None):
@@ -1298,7 +1305,7 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
                     for p in pts
                 ]
             with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "K", "location": "main.py:CanvasTextItem.handle_resize_release", "message": "text resize release", "data": {"idx": getattr(handle, "handle_index", None), "width": round(self.textWidth(), 2), "font": round(self.font().pointSizeF(), 2), "box_height": round(float(self._box_height or 0), 2), "native_h": round(native.height(), 2), "box": [round(br.x(), 2), round(br.y(), 2), round(br.width(), 2), round(br.height(), 2)], "scene_box": [round(sbr.x(), 2), round(sbr.y(), 2), round(sbr.width(), 2), round(sbr.height(), 2)], "handles": handle_pts, "expected": expected, "pos": [round(self.pos().x(), 2), round(self.pos().y(), 2)]}, "timestamp": int(time.time() * 1000)}) + "\n")
+                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "L", "location": "main.py:CanvasTextItem.handle_resize_release", "message": "text resize release", "data": {"idx": getattr(handle, "handle_index", None), "width": round(self.textWidth(), 2), "font": round(self.font().pointSizeF(), 2), "box_height": round(float(self._box_height or 0), 2), "native_h": round(native.height(), 2), "slack": round(float(self._box_height or 0) - native.height(), 2), "user_h": bool(getattr(self, "_user_box_height", False)), "box": [round(br.x(), 2), round(br.y(), 2), round(br.width(), 2), round(br.height(), 2)], "scene_box": [round(sbr.x(), 2), round(sbr.y(), 2), round(sbr.width(), 2), round(sbr.height(), 2)], "handles": handle_pts, "expected": expected, "pos": [round(self.pos().x(), 2), round(self.pos().y(), 2)]}, "timestamp": int(time.time() * 1000)}) + "\n")
         except Exception:
             pass
         # #endregion
@@ -5010,6 +5017,7 @@ class CanvasView(QGraphicsView):
             clone.setDefaultTextColor(item.defaultTextColor())
             clone.setTextWidth(item.textWidth())
             clone._box_height = float(getattr(item, "_box_height", 0) or 0)
+            clone._user_box_height = bool(getattr(item, "_user_box_height", False))
             clone._update_transform_origin()
         else:
             return None

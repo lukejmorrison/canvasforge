@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
-- **Text box move/resize:** Pointer and Move treat a text box like any other object. Click-drag moves it. Corner handles scale the type size; side handles change the box size without changing the type. Resize handles stay on the box after typing or resizing. Double-click or the Text tool still edits. Clicking empty canvas still places a new box.
+- **Text box move/resize:** Pointer and Move treat a text box like any other object. Click-drag moves it. Corner handles scale the type (font and wrap width together) so the handles stay on the type. Side handles change the box size without changing the type. Double-click or the Text tool still edits. Clicking empty canvas still places a new box.
 - **Eyedropper hang / wrong preview:** Magnifiers now render the zoomed crop to an offscreen image instead of `scene.render()` into a viewport-child `paintEvent` (that re-entered paint on Wayland, hung the session, and crashed the picker on the second use). The loupe radius follows view pixels and keeps the preview aspect ratio. Hover updates the Fill swatch without committing; click still stores the colour. The canvas checkerboard uses a tiled pixmap instead of a Python fillRect loop, which was taking ~500ms per paint on a large canvas.
 
 ### Changed
