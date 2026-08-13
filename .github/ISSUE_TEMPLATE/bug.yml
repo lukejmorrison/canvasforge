@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible bug in CanvasForge
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for something that is broken. Ideas, questions, and packaging help belong in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
+  - type: textarea
+    id: describe
+    attributes:
+      label: Describe the bug
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps someone else can follow.
+      placeholder: |
+        1. Open CanvasForge
+        2. Choose the Eyedropper
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should have happened?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CanvasForge version
+      description: AUR package, GitHub tag, or commit. Write unknown if you cannot tell.
+      placeholder: 0.6.0-beta.10
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Omarchy / Arch Linux
+        - Other Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Logs and extra context
+      description: Error text, screenshots, or anything else that helps. Do not paste secrets.

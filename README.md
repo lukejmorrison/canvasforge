@@ -1,26 +1,109 @@
-# CanvasForge
+<p align="center">
+  <img src="assets/app_icons/canvasForge_app_icon.png" width="168" alt="CanvasForge">
+</p>
 
-[![Release](https://img.shields.io/github/v/release/lukejmorrison/canvasforge?include_prereleases&sort=semver)](https://github.com/lukejmorrison/canvasforge/releases)
-[![AUR](https://img.shields.io/aur/version/canvasforge-beta)](https://aur.archlinux.org/packages/canvasforge-beta)
-[![License](https://img.shields.io/github/license/lukejmorrison/canvasforge)](LICENSE)
+<h1 align="center">CanvasForge</h1>
 
-**The polished screenshot annotation canvas for Omarchy Arch Linux + Hyprland.**
+<p align="center">
+  <strong>The polished screenshot annotation canvas for Omarchy Arch Linux + Hyprland.</strong>
+</p>
 
-CanvasForge is a fast PyQt6 canvas made for turning raw screenshots into beautiful, documentation-ready visuals. It shines brightest on **Omarchy**, where it integrates deeply as a first-class screenshot editor, scratchpad citizen, and Grok TUI companion.
+<p align="center">
+  <a href="https://github.com/lukejmorrison/canvasforge/releases"><img src="https://img.shields.io/github/v/release/lukejmorrison/canvasforge?include_prereleases&sort=semver" alt="Release"></a>
+  <a href="https://aur.archlinux.org/packages/canvasforge-beta"><img src="https://img.shields.io/aur/version/canvasforge-beta" alt="AUR"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/lukejmorrison/canvasforge" alt="License"></a>
+</p>
 
-## 🚀 Omarchy Integration (First-Class Citizen)
+<p align="center">
+  Native desktop app. Install it on your machine and it runs locally — not a website, not a hosted web app.
+</p>
 
-CanvasForge is designed from the ground up to feel native on Omarchy Arch Linux:
+<p align="center">
+  <a href="https://aur.archlinux.org/packages/canvasforge-beta"><img src="https://img.shields.io/badge/Install-AUR%20canvasforge--beta-1793D1?style=for-the-badge&logo=archlinux&logoColor=white" alt="Install from AUR"></a>
+  <a href="https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.10"><img src="https://img.shields.io/badge/Download-v0.6.0--beta.10-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub release v0.6.0-beta.10"></a>
+  <a href="ROADMAP.md"><img src="https://img.shields.io/badge/Roadmap-Windows%20%2F%20macOS%20%2F%20mobile-FF6B35?style=for-the-badge" alt="Roadmap"></a>
+</p>
 
-- **Print Screen → CanvasForge** — Set `OMARCHY_SCREENSHOT_EDITOR=canvasforge` and every screenshot opens directly in CanvasForge with the correct monitor resolution.
-- **Super + S Scratchpad** — Enable "Launch in Omarchy Scratchpad" in Preferences. CanvasForge lives in your scratchpad and appears on whatever monitor your mouse is on.
-- **Monitor-Accurate Canvas** — Automatically creates a canvas that matches your physical monitor resolution (correctly handles fractional scaling like `scale 1.2`).
-- **Grok TUI Optimized** — One-click **Send to Agent → Clipboard (base64 JPEG)** puts clean, properly-sized images on the clipboard that paste perfectly into Grok.
-- **HiDPI & Fractional Scaling** — Proper support for modern high-DPI and scaled displays common in Omarchy setups.
+<p align="center">
+  <a href="https://aur.archlinux.org/packages/canvasforge-beta">AUR package</a>
+  ·
+  <a href="https://github.com/lukejmorrison/canvasforge/releases">All GitHub releases</a>
+  ·
+  <a href="https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.10">Latest tarball</a>
+  ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+  ·
+  <a href="https://github.com/lukejmorrison/canvasforge/discussions">Discussions</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/hero-annotating.png" alt="CanvasForge annotating a screenshot on Omarchy" width="100%">
+</p>
+
+A fast PyQt6 canvas for turning raw screenshots into documentation-ready visuals. It shines on **Omarchy**: first-class screenshot editor, scratchpad citizen, and Grok TUI companion.
+
+## How it works
+
+Product shots below were generated with **Grok Imagine**. They show the workflow; the installed app is the real UI.
+
+### 1. Press Print Screen
+
+The capture lands on a monitor-accurate canvas. On Omarchy, set `OMARCHY_SCREENSHOT_EDITOR=canvasforge` and Print Screen opens CanvasForge.
+
+<p align="center">
+  <img src="docs/images/howto-capture.png" alt="Print Screen opens the capture on the CanvasForge canvas" width="100%">
+</p>
+
+### 2. Annotate
+
+Arrows, numbered steps, callouts, text boxes, highlight, blur, eyedropper, and the Colour Selector Palette. Pointer and Move treat text like any other object.
+
+<p align="center">
+  <img src="docs/images/howto-annotate.png" alt="Annotating a screenshot with arrows, text, steps, and the colour palette" width="100%">
+</p>
+
+### 3. Send to Agent
+
+One click flattens a clean JPEG for Grok, Claude, Codex, or OpenClaw — clipboard, folder, or command. No website in the middle.
+
+<p align="center">
+  <img src="docs/images/howto-send-to-agent.png" alt="Send to Agent hands the annotated image to a local Grok TUI" width="100%">
+</p>
+
+## Omarchy integration
+
+- **Print Screen → CanvasForge** — Set `OMARCHY_SCREENSHOT_EDITOR=canvasforge` and every screenshot opens with the correct monitor resolution.
+- **Super + S Scratchpad** — Enable "Launch in Omarchy Scratchpad" in Preferences. CanvasForge appears on whatever monitor your mouse is on.
+- **Monitor-accurate canvas** — Uses physical monitor resolution (including fractional scaling like `scale 1.2`).
+- **Grok TUI** — **Send to Agent → Clipboard (base64 JPEG)** pastes a clean, sized image into Grok.
+- **HiDPI** — Proper support for high-DPI and scaled Omarchy displays.
 
 See the [full Omarchy setup guide](#omarchy-setup) below.
 
-## ✨ Features
+## Install packages
+
+These are the packages you can install today. Windows, Apple Silicon, and AppImage installers are on the [roadmap](ROADMAP.md) — they are not hosted as a website.
+
+| Package | Status | Link |
+|---------|--------|------|
+| **AUR `canvasforge-beta`** (Omarchy / Arch) | Ready | [aur.archlinux.org/packages/canvasforge-beta](https://aur.archlinux.org/packages/canvasforge-beta) |
+| **GitHub Release tarball** | Ready | [v0.6.0-beta.10](https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.10) — this is what AUR consumes |
+| **All releases** | Ready | [github.com/lukejmorrison/canvasforge/releases](https://github.com/lukejmorrison/canvasforge/releases) |
+| Other Linux (Flatpak / local venv) | Ready | [Build from this repo](#other-systems) |
+| macOS Intel `.app` / DMG | Ready to build | [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) |
+| Windows installer | Planned | [Roadmap — Phase 1](ROADMAP.md#phase-1--desktop-packages-help-wanted) |
+| macOS Apple Silicon | Planned | [Roadmap — Phase 1](ROADMAP.md#phase-1--desktop-packages-help-wanted) |
+| Android / iOS | Later | [Roadmap — Phase 2 and 3](ROADMAP.md#phase-2--mobile-sister-app) |
+
+Omarchy / Arch (press Enter at every prompt):
+
+```bash
+yay -S canvasforge-beta
+```
+
+Do **not** use `yay -Syu canvasforge-beta` unless you intend a full system upgrade.
+
+## Features
 
 - **Screenshot Editor for Omarchy** — Deep integration as a Print Screen replacement with monitor-accurate canvases and scratchpad support.
 - **Powerful Annotation Tools** — Arrows, callouts, steps, blur, highlight, borders, text, and vector shapes with live previews.
@@ -36,13 +119,25 @@ See the [full Omarchy setup guide](#omarchy-setup) below.
 
 ### Omarchy / Arch Linux (Recommended)
 
+Install **only** the CanvasForge AUR package (this does not upgrade the rest of your system):
+
 ```bash
 yay -S canvasforge-beta
 ```
 
-Then just press **Print Screen**. CanvasForge will handle the rest.
+Or from a checkout:
 
-See the [full Omarchy setup](#omarchy-setup) above for scratchpad + multi-monitor configuration.
+```bash
+bash scripts/install_canvasforge.sh
+```
+
+**Press Enter at every prompt** to accept the defaults. You may be asked for your sudo password once.
+
+Do **not** use `yay -Syu canvasforge-beta` unless you intend a full system upgrade (that can rebuild unrelated packages such as gcc).
+
+Then press **Print Screen**. CanvasForge will handle the rest.
+
+See the [full Omarchy setup](#omarchy-setup) below for scratchpad + multi-monitor configuration.
 
 ### Other Systems
 
@@ -90,13 +185,14 @@ bash scripts/install_canvasforge.sh --local
 The installer is robust and works well on Pop!_OS, Fedora, and other distributions.
 
 ```bash
-# Standard install/update from GitHub
+# Arch/Omarchy: AUR package canvasforge-beta only (press Enter at prompts)
+# Other distros: clone from GitHub into a venv
 bash scripts/install_canvasforge.sh
 
-# Full reinstall (recommended when recovering from broken .venv state)
+# Full venv reinstall (non-Arch, or with --local)
 bash scripts/install_canvasforge.sh --clean
 
-# Install from your current local checkout
+# Developer install from your current local checkout (venv, not AUR)
 bash scripts/install_canvasforge.sh --local
 
 # Full reinstall from your current local checkout
@@ -106,7 +202,7 @@ bash scripts/install_canvasforge.sh --local --clean
 bash scripts/install_canvasforge.sh --help
 ```
 
-The installer now auto-heals unhealthy virtual environments and retries Python dependency installs, which makes reinstalls more reliable on Arch/Omarchy systems.
+On Omarchy/Arch, `scripts/install_canvasforge.sh` installs only `canvasforge-beta` from AUR. On other distributions it uses a venv and auto-heals unhealthy environments.
 
 ## Usage Notes
 
@@ -195,7 +291,30 @@ This makes `Super + S` (scratchpad toggle) bring up CanvasForge on the monitor y
 - `artifacts/` – Sample vector callouts bundled for quick use.
 - `packaging/aur/canvasforge-beta/` – AUR beta package recipe and release checklist.
 - `requirements.txt` – Runtime dependencies (currently only PyQt6).
+- [`ROADMAP.md`](ROADMAP.md) – Platform roadmap (desktop packages, mobile companion).
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) – Discussions, Issues, and pull requests.
+- [`docs/targets.md`](docs/targets.md) – What to build locally vs on CI.
+- [`docs/images/`](docs/images/) – README product shots (Grok Imagine).
+
+## Roadmap
+
+CanvasForge stays a native app: one repo, one version, native packages per OS. The desktop editor remains PyQt6. A phone app, when it exists, is a companion that sends captures to the desktop — not a rewrite and not a hosted site.
+
+| Phase | Focus | Status |
+|-------|--------|--------|
+| Now | AUR, Flatpak, macOS Intel `.app` | Ships today |
+| 1 | Windows installer, macOS Apple Silicon, AppImage, multi-asset Releases | Help wanted |
+| 2 | Android companion + QR pairing on LAN / Tailscale | Later |
+| 3 | iOS, optional stores (winget, Homebrew, Flathub) | Last |
+
+Full sequence, non-goals, and how to help: **[ROADMAP.md](ROADMAP.md)**.
 
 ## Contributing
 
-Issues and pull requests are welcome. Please keep screenshots, `pasted_logs/`, and `wizwam-code-review/` folders out of commits as they are environment-specific.
+Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** before you open a pull request.
+
+- **Ideas, questions, and packaging help** go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
+- **Reproducible bugs** go in [Issues](https://github.com/lukejmorrison/canvasforge/issues/new?template=bug.yml).
+- **Code** is a pull request linked to an Issue (tiny docs fixes may link a Discussion).
+
+Keep screenshots, `pasted_logs/`, and `wizwam-code-review/` out of commits. Update [CHANGELOG.md](CHANGELOG.md) for user-facing changes.

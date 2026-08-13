@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **README home page:** Centred logo, Grok Imagine product shots, AUR and GitHub release install links, public [ROADMAP.md](ROADMAP.md), and a Discussions-first [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## [0.6.0-beta.10] - 2026-08-12
 
 ### Fixed
