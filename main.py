@@ -1837,19 +1837,32 @@ class CanvasBoundsItem(QGraphicsRectItem):
         self.finish_resize()
 
 
-def _magnifier_scene_source_rect(view, scene_pos, source_radius_px):
-    """Map a view-pixel loupe radius into scene coordinates."""
+def _magnifier_scene_source_rect(view, scene_pos, source_radius_px, target_rect=None):
+    """Map a view-pixel loupe radius into scene coordinates.
+
+    When target_rect is set, the source aspect matches the preview so the
+    crop is not stretched (IgnoreAspectRatio on a square source into a wide
+    eyedropper widget made the loupe show the wrong neighbourhood).
+    """
     radius = max(4, int(source_radius_px))
     center_view = view.mapFromScene(scene_pos)
     edge_scene = view.mapToScene(center_view + QPoint(radius, 0))
     grab_r = abs(float(edge_scene.x()) - float(scene_pos.x()))
     if grab_r < 1.0:
         grab_r = float(radius)
+    half_w = grab_r
+    half_h = grab_r
+    if target_rect is not None and target_rect.height() > 0:
+        aspect = float(target_rect.width()) / float(target_rect.height())
+        if aspect >= 1.0:
+            half_w = grab_r * aspect
+        else:
+            half_h = grab_r / max(aspect, 0.01)
     return QRectF(
-        float(scene_pos.x()) - grab_r,
-        float(scene_pos.y()) - grab_r,
-        grab_r * 2,
-        grab_r * 2,
+        float(scene_pos.x()) - half_w,
+        float(scene_pos.y()) - half_h,
+        half_w * 2,
+        half_h * 2,
     )
 
 
@@ -1859,7 +1872,7 @@ def _magnifier_render_scene(view, scene_pos, source_radius_px, target_rect, pain
     Render offscreen first. scene.render() into a viewport-child painter
     re-enters paintEvent on Wayland (recursive repaint, hang, QPainter TypeError).
     """
-    source = _magnifier_scene_source_rect(view, scene_pos, source_radius_px)
+    source = _magnifier_scene_source_rect(view, scene_pos, source_radius_px, target_rect)
     width = max(1, int(math.ceil(target_rect.width())))
     height = max(1, int(math.ceil(target_rect.height())))
     image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
@@ -3335,10 +3348,14 @@ class CanvasView(QGraphicsView):
             color = self._sample_color_at(scene_pos, self.itemAt(event.pos()))
             if color and color.isValid():
                 self._colour_picker_magnifier.show_at(event.pos(), scene_pos, color)
-                self.main_window._status_bar.showMessage(
-                    f"Eyedropper: {color.name()}",
-                    1000,
-                )
+                hex_name = color.name()
+                if getattr(self, "_eyedropper_status_hex", None) != hex_name:
+                    self._eyedropper_status_hex = hex_name
+                    self.main_window._status_bar.showMessage(
+                        f"Eyedropper: {hex_name}",
+                        1000,
+                    )
+                    self.main_window.preview_fill_colour(color)
             else:
                 self._colour_picker_magnifier.hide()
             return
@@ -6778,11 +6795,33 @@ class MainWindow(QMainWindow):
             return color.name(QColor.NameFormat.HexArgb)
         return color.name()
 
+    def preview_fill_colour(self, color: QColor):
+        """Update the details-panel swatch for hover without committing Fill."""
+        if not hasattr(self, "fill_colour_preview"):
+            return
+        qcolor = QColor(color)
+        if not qcolor.isValid():
+            return
+        rgba = qcolor.rgba()
+        if getattr(self, "_hover_preview_rgba", None) == rgba:
+            return
+        self._hover_preview_rgba = rgba
+        icon = self._colour_swatch_icon(qcolor, QSize(30, 22))
+        self.fill_colour_preview.setPixmap(icon.pixmap(30, 22))
+        if qcolor.alpha() == 0:
+            label = "Transparent"
+        elif qcolor.alpha() < 255:
+            label = qcolor.name(QColor.NameFormat.HexArgb)
+        else:
+            label = qcolor.name()
+        self.fill_colour_label.setText(label)
+
     def set_fill_color(self, color: QColor, source: str = "picker"):
         qcolor = QColor(color)
         if not qcolor.isValid():
             return False
         self.current_fill_color = qcolor
+        self._hover_preview_rgba = None
         settings_value = qcolor.name(QColor.NameFormat.HexArgb) if qcolor.alpha() < 255 else qcolor.name()
         self.settings.setValue("tools/fill_color", settings_value)
         self.view.invalidate_fill_cursor()
