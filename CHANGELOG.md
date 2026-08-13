@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - **Roadmap and contributing:** Public [ROADMAP.md](ROADMAP.md) for native desktop packages, a later mobile companion, and non-goals (no hosted PWA). [CONTRIBUTING.md](CONTRIBUTING.md) and GitHub templates send ideas and packaging help to Discussions, bugs to Issues, and code to pull requests.
+- **README product shots:** Hero and how-to images generated with Grok Imagine (`docs/images/`), plus a centred logo and a three-step Print Screen → annotate → Send to Agent walkthrough.
+- **Install package links:** README home page now links the AUR `canvasforge-beta` package, the current GitHub release tarball, and the full releases list.
 
 ### Changed
 - **Arch/Omarchy installer:** `scripts/install_canvasforge.sh` now installs only the `canvasforge-beta` AUR package (not a full system upgrade). It tells you to press Enter at each prompt to accept the defaults.
