@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
-- **Image Library:** The left sidebar now shows large image thumbnails instead of filename-heavy list rows. Hover a thumbnail to see the full file path; right-click and choose **Copy path** to copy it to the clipboard. Name, size, and modified time stay in the details pane.
+- **Image Library:** The left sidebar now shows large image thumbnails instead of filename-heavy list rows. Each thumbnail fills its tile edge-to-edge (cover crop, no grey letterbox or filename caption). Hover a thumbnail to see the full file path; right-click and choose **Copy path** to copy it to the clipboard. Name, size, and modified time stay in the details pane.
 
 ## [0.6.0-beta.11] - 2026-08-13
 

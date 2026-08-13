@@ -24,7 +24,6 @@ from PyQt6.QtGui import (
     QPixmap,
     QPainter,
     QColor,
-    QFont,
     QPen,
     QImage,
     QImageReader,
@@ -68,8 +67,6 @@ SCREENSHOT_SETTINGS_KEY = "screenshot_library_dir"
 # Generate at 200px so previews fill the ~220px sidebar without looking like file icons.
 THUMBNAIL_SIZE = 200
 THUMBNAIL_MIN = 120
-CAPTION_HEIGHT = 22
-ITEM_PADDING = 8
 DATE_FORMAT = "yyMMdd HHmmss"
 MAX_CACHE_SIZE = 500  # Max number of cached thumbnails
 
@@ -85,14 +82,62 @@ def format_file_size(size_bytes: int) -> str:
 
 
 def display_thumb_size(viewport_width: int) -> int:
-    """Square preview size that fills the sidebar width, clamped to 120–200px."""
-    inner = max(THUMBNAIL_MIN, int(viewport_width) - ITEM_PADDING * 2)
-    return min(THUMBNAIL_SIZE, inner)
+    """Square tile size that spans the sidebar width, clamped to 120–200px."""
+    return min(THUMBNAIL_SIZE, max(THUMBNAIL_MIN, int(viewport_width)))
 
 
 def item_row_height(viewport_width: int) -> int:
-    """List row height for a large thumbnail plus a short filename caption."""
-    return display_thumb_size(viewport_width) + CAPTION_HEIGHT + ITEM_PADDING * 2
+    """List row height for an edge-to-edge square thumbnail (no caption)."""
+    return display_thumb_size(viewport_width)
+
+
+def cover_crop_rect(src_w: int, src_h: int, target: int) -> QRect:
+    """Centre square cropped from an image that already cover-fills ``target``."""
+    if src_w <= 0 or src_h <= 0 or target <= 0:
+        return QRect(0, 0, max(1, target), max(1, target))
+    return QRect(
+        max(0, (src_w - target) // 2),
+        max(0, (src_h - target) // 2),
+        min(target, src_w),
+        min(target, src_h),
+    )
+
+
+def cover_dest_rect(logical_w: float, logical_h: float, dest: QRect) -> QRect:
+    """Destination rect that cover-fills ``dest``. The caller must clip to ``dest``."""
+    if logical_w <= 0 or logical_h <= 0 or dest.width() <= 0 or dest.height() <= 0:
+        return dest
+    scale = max(dest.width() / logical_w, dest.height() / logical_h)
+    draw_w = max(1, int(round(logical_w * scale)))
+    draw_h = max(1, int(round(logical_h * scale)))
+    return QRect(
+        dest.left() + (dest.width() - draw_w) // 2,
+        dest.top() + (dest.height() - draw_h) // 2,
+        draw_w,
+        draw_h,
+    )
+
+
+def cover_crop_image(image: QImage, target: int) -> QImage:
+    """Scale with cover, then centre-crop to a ``target`` square."""
+    if image.isNull() or target <= 0:
+        return image
+    if image.width() != target or image.height() != target:
+        image = image.scaled(
+            target,
+            target,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+    crop = cover_crop_rect(image.width(), image.height(), target)
+    if (
+        crop.x() != 0
+        or crop.y() != 0
+        or crop.width() != image.width()
+        or crop.height() != image.height()
+    ):
+        image = image.copy(crop)
+    return image
 
 
 def library_path_tooltip(file_path: str) -> str:
@@ -134,22 +179,17 @@ class _ThumbnailJob(QRunnable):
             native = reader.size()
             if native.isValid() and native.width() > 0 and native.height() > 0:
                 scaled_size = native.scaled(
-                    target, target, Qt.AspectRatioMode.KeepAspectRatio
+                    target, target, Qt.AspectRatioMode.KeepAspectRatioByExpanding
                 )
                 reader.setScaledSize(scaled_size)
             image = reader.read()
             if image.isNull():
-                # Fallback: full decode then scale (SVG / odd formats).
+                # Fallback: full decode then cover-crop (SVG / odd formats).
                 image = QImage(self.file_path)
                 if image.isNull():
                     self.signals.finished.emit(self.file_path, self.mtime, None)
                     return
-                image = image.scaled(
-                    target,
-                    target,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
+            image = cover_crop_image(image, target)
             image.setDevicePixelRatio(self.dpr)
             self.signals.finished.emit(self.file_path, self.mtime, image)
         except Exception:
@@ -234,19 +274,17 @@ class ThumbnailCache(QObject):
 
 
 class ImageLibraryDelegate(QStyledItemDelegate):
-    """Paints a large image preview with a short filename caption under it."""
+    """Paints an edge-to-edge cover-cropped thumbnail with no inner padding or caption."""
 
     def __init__(self, thumbnail_cache: ThumbnailCache, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._cache = thumbnail_cache
-        self._font = QFont()
-        self._font.setPointSize(9)
 
     def _viewport_width(self, option: QStyleOptionViewItem) -> int:
         widget = option.widget
         if widget is not None:
             return widget.viewport().width()
-        return max(option.rect.width(), THUMBNAIL_SIZE + ITEM_PADDING * 2)
+        return max(option.rect.width(), THUMBNAIL_SIZE)
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         painter.save()
@@ -266,57 +304,26 @@ class ImageLibraryDelegate(QStyledItemDelegate):
 
         file_info = source_model.fileInfo(source_index)
         file_path = file_info.absoluteFilePath()
-        file_name = file_info.fileName()
 
-        rect = option.rect
-        padding = ITEM_PADDING
-        thumb_size = display_thumb_size(rect.width())
-        row_rect = rect.adjusted(1, 1, -1, -1)
+        tile = option.rect
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
-        if selected:
-            painter.fillRect(row_rect, QColor(36, 58, 86))
-            painter.setPen(QPen(QColor(42, 130, 218), 2))
-            painter.drawRect(row_rect.adjusted(1, 1, -2, -2))
-        elif hovered:
-            painter.fillRect(row_rect, QColor(48, 48, 48))
-
-        thumb_rect = QRect(
-            rect.left() + (rect.width() - thumb_size) // 2,
-            rect.top() + padding,
-            thumb_size,
-            thumb_size,
-        )
-        painter.fillRect(thumb_rect, QColor(50, 50, 50))
-
+        painter.setClipRect(tile)
         thumbnail = self._cache.get_thumbnail(file_path)
         if thumbnail and not thumbnail.isNull():
             dpr = thumbnail.devicePixelRatio() or 1.0
             logical_w = max(1.0, thumbnail.width() / dpr)
             logical_h = max(1.0, thumbnail.height() / dpr)
-            scale = min(thumb_rect.width() / logical_w, thumb_rect.height() / logical_h)
-            draw_w = max(1, int(logical_w * scale))
-            draw_h = max(1, int(logical_h * scale))
-            draw_x = thumb_rect.left() + (thumb_rect.width() - draw_w) // 2
-            draw_y = thumb_rect.top() + (thumb_rect.height() - draw_h) // 2
-            painter.drawPixmap(QRect(draw_x, draw_y, draw_w, draw_h), thumbnail)
+            painter.drawPixmap(cover_dest_rect(logical_w, logical_h, tile), thumbnail)
 
-        painter.setFont(self._font)
-        fm = painter.fontMetrics()
-        caption_width = max(24, rect.width() - padding * 2)
-        caption_rect = QRect(
-            rect.left() + padding,
-            thumb_rect.bottom() + 2,
-            caption_width,
-            CAPTION_HEIGHT,
-        )
-        painter.setPen(QColor(220, 220, 220))
-        painter.drawText(
-            caption_rect,
-            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-            fm.elidedText(file_name, Qt.TextElideMode.ElideMiddle, caption_width),
-        )
+        painter.setClipping(False)
+        if selected:
+            painter.setPen(QPen(QColor(42, 130, 218), 2))
+            painter.drawRect(tile.adjusted(1, 1, -2, -2))
+        elif hovered:
+            painter.setPen(QPen(QColor(90, 90, 90), 1))
+            painter.drawRect(tile.adjusted(0, 0, -1, -1))
 
         painter.restore()
 
