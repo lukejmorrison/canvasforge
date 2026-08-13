@@ -62,6 +62,7 @@ ALLOWED_EXTENSIONS: Tuple[str, ...] = (
 )
 
 SCREENSHOT_SETTINGS_KEY = "screenshot_library_dir"
+COLUMNS_SETTINGS_KEY = "image_library_columns"
 
 # Thumbnail cache and delegate constants.
 # Generate at 200px so previews fill the ~220px sidebar without looking like file icons.
@@ -69,6 +70,9 @@ THUMBNAIL_SIZE = 200
 THUMBNAIL_MIN = 120
 DATE_FORMAT = "yyMMdd HHmmss"
 MAX_CACHE_SIZE = 500  # Max number of cached thumbnails
+COLUMN_COUNT_MIN = 1
+COLUMN_COUNT_MAX = 3
+COLUMN_COUNT_DEFAULT = 1
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -89,6 +93,38 @@ def display_thumb_size(viewport_width: int) -> int:
 def item_row_height(viewport_width: int) -> int:
     """List row height for an edge-to-edge square thumbnail (no caption)."""
     return display_thumb_size(viewport_width)
+
+
+def clamp_column_count(columns: object) -> int:
+    """Keep the column control on 1, 2, or 3."""
+    try:
+        value = int(columns)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return COLUMN_COUNT_DEFAULT
+    return max(COLUMN_COUNT_MIN, min(COLUMN_COUNT_MAX, value))
+
+
+def tile_size_for_columns(viewport_width: int, columns: int) -> int:
+    """Square tile edge so ``columns`` thumbnails fit in ``viewport_width``."""
+    cols = clamp_column_count(columns)
+    available = max(1, int(viewport_width))
+    if cols <= 1:
+        return display_thumb_size(available)
+    return max(1, available // cols)
+
+
+def item_size_for_columns(viewport_width: int, columns: int) -> QSize:
+    """Item size for the current column count.
+
+    One column keeps the full-width list row. Two and three columns use a
+    square tile of ``viewport_width / N`` so more thumbs fit in the sidebar.
+    """
+    cols = clamp_column_count(columns)
+    available = max(1, int(viewport_width))
+    if cols <= 1:
+        return QSize(available, item_row_height(available))
+    tile = tile_size_for_columns(available, cols)
+    return QSize(tile, tile)
 
 
 def cover_crop_rect(src_w: int, src_h: int, target: int) -> QRect:
@@ -279,6 +315,13 @@ class ImageLibraryDelegate(QStyledItemDelegate):
     def __init__(self, thumbnail_cache: ThumbnailCache, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._cache = thumbnail_cache
+        self._columns = COLUMN_COUNT_DEFAULT
+
+    def set_columns(self, columns: int) -> None:
+        self._columns = clamp_column_count(columns)
+
+    def column_count(self) -> int:
+        return self._columns
 
     def _viewport_width(self, option: QStyleOptionViewItem) -> int:
         widget = option.widget
@@ -328,8 +371,7 @@ class ImageLibraryDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
-        width = self._viewport_width(option)
-        return QSize(width, item_row_height(width))
+        return item_size_for_columns(self._viewport_width(option), self._columns)
 
 
 class LibrarySortFilterProxy(QSortFilterProxyModel):
@@ -493,6 +535,8 @@ class ImageLibraryPanel(QWidget):
         # Thumbnail cache for background generation
         self._thumbnail_cache = ThumbnailCache(self)
         self._thumbnail_cache.thumbnailReady.connect(self._on_thumbnail_ready)
+        self._column_count = self._read_column_count()
+        self._applying_layout = False
 
         self._build_ui()
         self._install_shortcuts()
@@ -532,6 +576,7 @@ class ImageLibraryPanel(QWidget):
         layout.addLayout(header)
 
         self._delegate = ImageLibraryDelegate(self._thumbnail_cache, self)
+        self._delegate.set_columns(self._column_count)
 
         self.list_view = QListView()
         self.list_view.setViewMode(QListView.ViewMode.ListMode)
@@ -556,6 +601,7 @@ class ImageLibraryPanel(QWidget):
         footer.setSpacing(4)
 
         sort_row = QHBoxLayout()
+        sort_row.setSpacing(4)
         sort_row.addWidget(QLabel("Sort"))
         self.sort_combo = QComboBox()
         self.sort_combo.addItem("Date Modified ↓", ("modified", Qt.SortOrder.DescendingOrder))
@@ -563,10 +609,18 @@ class ImageLibraryPanel(QWidget):
         self.sort_combo.addItem("Name A→Z", ("name", Qt.SortOrder.AscendingOrder))
         self.sort_combo.addItem("Size ↑", ("size", Qt.SortOrder.AscendingOrder))
         self.sort_combo.addItem("Size ↓", ("size", Qt.SortOrder.DescendingOrder))
-        sort_row.addWidget(self.sort_combo)
+        sort_row.addWidget(self.sort_combo, 1)
 
-        # Zoom slider removed - not applicable in list mode
+        sort_row.addWidget(QLabel("Columns"))
+        self.columns_combo = QComboBox()
+        self.columns_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        for count in range(COLUMN_COUNT_MIN, COLUMN_COUNT_MAX + 1):
+            self.columns_combo.addItem(str(count), count)
+        sort_row.addWidget(self.columns_combo)
         footer.addLayout(sort_row)
+
+        self._sync_columns_combo()
+        self._apply_column_layout()
 
         self.properties_widget = ImageLibraryProperties()
         footer.addWidget(self.properties_widget)
@@ -588,6 +642,7 @@ class ImageLibraryPanel(QWidget):
         self.search_field.textChanged.connect(self._proxy.set_search_term)
         self.refresh_button.clicked.connect(self.refresh)
         self.sort_combo.currentIndexChanged.connect(self._handle_sort_change)
+        self.columns_combo.currentIndexChanged.connect(self._handle_columns_change)
         self.export_button.clicked.connect(self.exportRequested.emit)
         self.list_view.doubleClicked.connect(self._handle_activation)
         self.list_view.customContextMenuRequested.connect(self._show_item_context_menu)
@@ -644,7 +699,11 @@ class ImageLibraryPanel(QWidget):
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        self.list_view.doItemsLayout()
+        self._apply_column_layout()
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        self._apply_column_layout()
 
     def _handle_sort_change(self, idx: int) -> None:
         data = self.sort_combo.itemData(idx)
@@ -652,6 +711,69 @@ class ImageLibraryPanel(QWidget):
             return
         mode, order = data
         self._proxy.set_sort_mode(mode, order)
+
+    def _read_column_count(self) -> int:
+        if self.settings is None or not hasattr(self.settings, "value"):
+            return COLUMN_COUNT_DEFAULT
+        raw = self.settings.value(COLUMNS_SETTINGS_KEY, COLUMN_COUNT_DEFAULT)
+        return clamp_column_count(raw)
+
+    def column_count(self) -> int:
+        return self._column_count
+
+    def set_column_count(self, columns: int, persist: bool = True) -> None:
+        value = clamp_column_count(columns)
+        self._column_count = value
+        self._delegate.set_columns(value)
+        self._sync_columns_combo()
+        self._apply_column_layout()
+        if persist and self.settings is not None and hasattr(self.settings, "setValue"):
+            self.settings.setValue(COLUMNS_SETTINGS_KEY, value)
+
+    def _sync_columns_combo(self) -> None:
+        idx = self.columns_combo.findData(self._column_count)
+        if idx < 0:
+            idx = self.columns_combo.findData(COLUMN_COUNT_DEFAULT)
+        if idx < 0:
+            return
+        self.columns_combo.blockSignals(True)
+        self.columns_combo.setCurrentIndex(idx)
+        self.columns_combo.blockSignals(False)
+
+    def _handle_columns_change(self, idx: int) -> None:
+        data = self.columns_combo.itemData(idx)
+        if data is None:
+            return
+        self.set_column_count(int(data), persist=True)
+
+    def _apply_column_layout(self) -> None:
+        if self._applying_layout or not hasattr(self, "list_view"):
+            return
+        self._applying_layout = True
+        try:
+            columns = clamp_column_count(self._column_count)
+            viewport_width = max(1, self.list_view.viewport().width())
+            size = item_size_for_columns(viewport_width, columns)
+            self._delegate.set_columns(columns)
+            if columns <= 1:
+                self.list_view.setViewMode(QListView.ViewMode.ListMode)
+                self.list_view.setWrapping(False)
+                self.list_view.setSpacing(6)
+                self.list_view.setGridSize(QSize())
+            else:
+                self.list_view.setViewMode(QListView.ViewMode.IconMode)
+                self.list_view.setFlow(QListView.Flow.LeftToRight)
+                self.list_view.setWrapping(True)
+                self.list_view.setSpacing(0)
+                self.list_view.setGridSize(size)
+                self.list_view.setIconSize(size)
+            self.list_view.setResizeMode(QListView.ResizeMode.Adjust)
+            self.list_view.setMovement(QListView.Movement.Static)
+            self.list_view.setUniformItemSizes(True)
+            self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.list_view.doItemsLayout()
+        finally:
+            self._applying_layout = False
 
     def _handle_folder_selection(self, index: int) -> None:
         data = self.folder_combo.itemData(index)
