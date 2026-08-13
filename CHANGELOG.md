@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Eyedropper hang / wrong preview:** Magnifiers now render the zoomed crop to an offscreen image instead of `scene.render()` into a viewport-child `paintEvent` (that re-entered paint on Wayland, hung the session, and crashed the picker on the second use). The loupe radius follows view pixels. The canvas checkerboard uses a tiled pixmap instead of a Python fillRect loop, which was taking ~500ms per paint on a large canvas.
+
+### Changed
+- **Arch/Omarchy installer:** `scripts/install_canvasforge.sh` now installs only the `canvasforge-beta` AUR package (not a full system upgrade). It tells you to press Enter at each prompt to accept the defaults.
+
 ## [0.6.0-beta.10] - 2026-08-12
 
 ### Fixed

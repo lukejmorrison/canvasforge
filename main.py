@@ -1500,6 +1500,7 @@ class CanvasBoundsItem(QGraphicsRectItem):
     MIN_SIZE = 64
     CHECK_SIZE = 16
     PADDING = 64
+    _checker_pixmap = None
 
     def __init__(self, rect: QRectF, settings=None):
         super().__init__(rect)
@@ -1545,23 +1546,33 @@ class CanvasBoundsItem(QGraphicsRectItem):
             scene.addItem(self._info_tag)
         self.update_handles()
 
+    @classmethod
+    def checker_pixmap(cls):
+        if cls._checker_pixmap is None:
+            tile = cls.CHECK_SIZE
+            pixmap = QPixmap(tile * 2, tile * 2)
+            pixmap.fill(QColor("#f8fafc"))
+            tile_painter = QPainter(pixmap)
+            tile_painter.fillRect(0, 0, tile, tile, QColor("#e2e8f0"))
+            tile_painter.fillRect(tile, tile, tile, tile, QColor("#e2e8f0"))
+            tile_painter.end()
+            cls._checker_pixmap = pixmap
+        return cls._checker_pixmap
+
     def paint(self, painter, option, widget=None):
         rect = self.rect()
+        exposed = option.exposedRect.intersected(rect) if option is not None else QRectF(rect)
+        clip = painter.clipBoundingRect()
+        if clip.isValid() and not clip.isEmpty():
+            exposed = exposed.intersected(clip)
+        if exposed.isEmpty():
+            super().paint(painter, option, widget)
+            return
         painter.save()
-        painter.fillRect(rect, QColor("#ffffff"))
-        tile = self.CHECK_SIZE
-        light = QColor("#f8fafc")
-        dark = QColor("#e2e8f0")
-        left = int(math.floor(rect.left() / tile) * tile)
-        top = int(math.floor(rect.top() / tile) * tile)
-        y = top
-        while y < rect.bottom():
-            x = left
-            while x < rect.right():
-                color = dark if ((x // tile) + (y // tile)) % 2 == 0 else light
-                painter.fillRect(QRectF(x, y, tile, tile).intersected(rect), color)
-                x += tile
-            y += tile
+        period = float(self.CHECK_SIZE * 2)
+        off_x = exposed.left() - period * math.floor(exposed.left() / period)
+        off_y = exposed.top() - period * math.floor(exposed.top() / period)
+        painter.drawTiledPixmap(exposed, self.checker_pixmap(), QPointF(off_x, off_y))
         painter.restore()
         super().paint(painter, option, widget)
 
@@ -1826,27 +1837,45 @@ class CanvasBoundsItem(QGraphicsRectItem):
         self.finish_resize()
 
 
-def _magnifier_render_scene(view, scene_pos, source_radius_px, target_rect, painter):
-    """Paint a zoomed scene crop into target_rect.
-
-    Avoid QWidget.grab(): magnifiers are children of the viewport, so grabbing
-    during paintEvent re-enters painting on Wayland and can hang the UI.
-    """
-    grab_r = max(4, int(source_radius_px))
-    source = QRectF(
+def _magnifier_scene_source_rect(view, scene_pos, source_radius_px):
+    """Map a view-pixel loupe radius into scene coordinates."""
+    radius = max(4, int(source_radius_px))
+    center_view = view.mapFromScene(scene_pos)
+    edge_scene = view.mapToScene(center_view + QPoint(radius, 0))
+    grab_r = abs(float(edge_scene.x()) - float(scene_pos.x()))
+    if grab_r < 1.0:
+        grab_r = float(radius)
+    return QRectF(
         float(scene_pos.x()) - grab_r,
         float(scene_pos.y()) - grab_r,
         grab_r * 2,
         grab_r * 2,
     )
-    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-    painter.fillRect(target_rect, view.backgroundBrush())
+
+
+def _magnifier_render_scene(view, scene_pos, source_radius_px, target_rect, painter):
+    """Paint a zoomed scene crop into target_rect.
+
+    Render offscreen first. scene.render() into a viewport-child painter
+    re-enters paintEvent on Wayland (recursive repaint, hang, QPainter TypeError).
+    """
+    source = _magnifier_scene_source_rect(view, scene_pos, source_radius_px)
+    width = max(1, int(math.ceil(target_rect.width())))
+    height = max(1, int(math.ceil(target_rect.height())))
+    image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    offscreen = QPainter(image)
+    offscreen.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+    offscreen.fillRect(QRectF(0, 0, width, height), view.backgroundBrush())
     view.scene().render(
-        painter,
-        target_rect,
+        offscreen,
+        QRectF(0, 0, width, height),
         source,
         Qt.AspectRatioMode.IgnoreAspectRatio,
     )
+    offscreen.end()
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+    painter.drawImage(target_rect.topLeft(), image)
     return True
 
 
@@ -1936,10 +1965,13 @@ class ColourPickerMagnifier(QWidget):
                 y = view_pos.y() + margin
             x = max(0, min(x, parent.width() - self.width()))
             y = max(0, min(y, parent.height() - self.height()))
+        was_visible = self.isVisible()
+        elapsed = self._last_paint.elapsed()
+        will_update = elapsed >= self._min_repaint_ms or not was_visible
         self.move(x, y)
         self.show()
         self.raise_()
-        if self._last_paint.elapsed() >= self._min_repaint_ms:
+        if will_update:
             self._last_paint.restart()
             self.update()
 
