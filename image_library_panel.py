@@ -38,6 +38,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QLineEdit,
     QListView,
+    QMenu,
     QPushButton,
     QSlider,
     QSizePolicy,
@@ -63,11 +64,13 @@ ALLOWED_EXTENSIONS: Tuple[str, ...] = (
 
 SCREENSHOT_SETTINGS_KEY = "screenshot_library_dir"
 
-# Thumbnail cache and delegate constants
-THUMBNAIL_SIZE = 48
-ROW_HEIGHT = 74
+# Thumbnail cache and delegate constants.
+# Generate at 200px so previews fill the ~220px sidebar without looking like file icons.
+THUMBNAIL_SIZE = 200
+THUMBNAIL_MIN = 120
+CAPTION_HEIGHT = 22
+ITEM_PADDING = 8
 DATE_FORMAT = "yyMMdd HHmmss"
-LIST_DATE_FORMAT = "yyyy-MM-dd HH:mm"
 MAX_CACHE_SIZE = 500  # Max number of cached thumbnails
 
 
@@ -79,6 +82,31 @@ def format_file_size(size_bytes: int) -> str:
     if size_kb < 1024:
         return f"{size_kb:.0f} KB"
     return f"{size_kb / 1024:.1f} MB"
+
+
+def display_thumb_size(viewport_width: int) -> int:
+    """Square preview size that fills the sidebar width, clamped to 120–200px."""
+    inner = max(THUMBNAIL_MIN, int(viewport_width) - ITEM_PADDING * 2)
+    return min(THUMBNAIL_SIZE, inner)
+
+
+def item_row_height(viewport_width: int) -> int:
+    """List row height for a large thumbnail plus a short filename caption."""
+    return display_thumb_size(viewport_width) + CAPTION_HEIGHT + ITEM_PADDING * 2
+
+
+def library_path_tooltip(file_path: str) -> str:
+    """Hover text for a library item: the absolute file path."""
+    return str(Path(file_path).expanduser())
+
+
+def copy_library_path_to_clipboard(path: str) -> bool:
+    """Copy an absolute path to the clipboard. Returns True if the clipboard accepted it."""
+    clipboard = QGuiApplication.clipboard()
+    if clipboard is None:
+        return False
+    clipboard.setText(path)
+    return True
 
 
 class _ThumbnailSignals(QObject):
@@ -206,138 +234,95 @@ class ThumbnailCache(QObject):
 
 
 class ImageLibraryDelegate(QStyledItemDelegate):
-    """Custom delegate that displays thumbnails, filenames, and metadata in a list row."""
-    
+    """Paints a large image preview with a short filename caption under it."""
+
     def __init__(self, thumbnail_cache: ThumbnailCache, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._cache = thumbnail_cache
         self._font = QFont()
-        self._font.setPointSize(10)
-        self._meta_font = QFont()
-        self._meta_font.setPointSize(8)
-    
+        self._font.setPointSize(9)
+
+    def _viewport_width(self, option: QStyleOptionViewItem) -> int:
+        widget = option.widget
+        if widget is not None:
+            return widget.viewport().width()
+        return max(option.rect.width(), THUMBNAIL_SIZE + ITEM_PADDING * 2)
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         painter.save()
-        
-        # Get file info from model
+
         model = index.model()
-        source_model = None
         source_index = index
-        
-        # Handle proxy model
-        if hasattr(model, 'sourceModel'):
+        if hasattr(model, "sourceModel") and hasattr(model, "mapToSource"):
             source_model = model.sourceModel()
-            if hasattr(model, 'mapToSource'):
-                source_index = model.mapToSource(index)
+            source_index = model.mapToSource(index)
         else:
             source_model = model
-        
+
         if not isinstance(source_model, QFileSystemModel):
             super().paint(painter, option, index)
             painter.restore()
             return
-        
+
         file_info = source_model.fileInfo(source_index)
         file_path = file_info.absoluteFilePath()
         file_name = file_info.fileName()
-        modified = file_info.lastModified()
-        suffix = file_info.suffix().upper() or "FILE"
-        
-        rect = option.rect
-        padding = 6
 
-        # Draw row background with a bit more visual separation than the raw list view.
+        rect = option.rect
+        padding = ITEM_PADDING
+        thumb_size = display_thumb_size(rect.width())
         row_rect = rect.adjusted(1, 1, -1, -1)
-        if option.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(row_rect, QColor(42, 130, 218))
-        elif option.state & QStyle.StateFlag.State_MouseOver:
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+
+        if selected:
+            painter.fillRect(row_rect, QColor(36, 58, 86))
+            painter.setPen(QPen(QColor(42, 130, 218), 2))
+            painter.drawRect(row_rect.adjusted(1, 1, -2, -2))
+        elif hovered:
             painter.fillRect(row_rect, QColor(48, 48, 48))
-        
-        # Draw thumbnail
+
         thumb_rect = QRect(
-            rect.left() + padding,
-            rect.top() + (rect.height() - THUMBNAIL_SIZE) // 2,
-            THUMBNAIL_SIZE,
-            THUMBNAIL_SIZE
+            rect.left() + (rect.width() - thumb_size) // 2,
+            rect.top() + padding,
+            thumb_size,
+            thumb_size,
         )
-        
+        painter.fillRect(thumb_rect, QColor(50, 50, 50))
+
         thumbnail = self._cache.get_thumbnail(file_path)
         if thumbnail and not thumbnail.isNull():
-            # Center the thumbnail in the thumb_rect
-            thumb_x = thumb_rect.left() + (thumb_rect.width() - thumbnail.width()) // 2
-            thumb_y = thumb_rect.top() + (thumb_rect.height() - thumbnail.height()) // 2
-            painter.drawPixmap(thumb_x, thumb_y, thumbnail)
-        else:
-            # Draw placeholder
-            painter.fillRect(thumb_rect, QColor(50, 50, 50))
-        
-        # Calculate text positions. Metadata lives on its own line so it remains visible
-        # when the library panel is narrowed.
-        text_left = thumb_rect.right() + padding * 2
-        text_right = rect.right() - padding
-        available_width = max(24, text_right - text_left)
-        date_str = modified.toString(LIST_DATE_FORMAT)
-        size_str = format_file_size(file_info.size())
-        meta_parts = [date_str, size_str, suffix]
-        meta_str = " | ".join(meta_parts)
+            dpr = thumbnail.devicePixelRatio() or 1.0
+            logical_w = max(1.0, thumbnail.width() / dpr)
+            logical_h = max(1.0, thumbnail.height() / dpr)
+            scale = min(thumb_rect.width() / logical_w, thumb_rect.height() / logical_h)
+            draw_w = max(1, int(logical_w * scale))
+            draw_h = max(1, int(logical_h * scale))
+            draw_x = thumb_rect.left() + (thumb_rect.width() - draw_w) // 2
+            draw_y = thumb_rect.top() + (thumb_rect.height() - draw_h) // 2
+            painter.drawPixmap(QRect(draw_x, draw_y, draw_w, draw_h), thumbnail)
 
-        # Draw filename with middle elision so extensions remain visible.
         painter.setFont(self._font)
         fm = painter.fontMetrics()
-        title_rect = QRect(
-            text_left,
-            rect.top() + 8,
-            available_width,
-            fm.height() + 2,
+        caption_width = max(24, rect.width() - padding * 2)
+        caption_rect = QRect(
+            rect.left() + padding,
+            thumb_rect.bottom() + 2,
+            caption_width,
+            CAPTION_HEIGHT,
         )
-        
         painter.setPen(QColor(220, 220, 220))
         painter.drawText(
-            title_rect,
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            fm.elidedText(file_name, Qt.TextElideMode.ElideMiddle, available_width)
-        )
-        
-        painter.setFont(self._meta_font)
-        meta_fm = painter.fontMetrics()
-        meta_top = title_rect.bottom() + 4
-        meta_rect = QRect(
-            text_left,
-            meta_top,
-            available_width,
-            meta_fm.height() + 2
+            caption_rect,
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+            fm.elidedText(file_name, Qt.TextElideMode.ElideMiddle, caption_width),
         )
 
-        painter.setPen(QColor(178, 184, 192))
-        if meta_fm.horizontalAdvance(meta_str) <= available_width:
-            painter.drawText(
-                meta_rect,
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                meta_str
-            )
-        else:
-            painter.drawText(
-                meta_rect,
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                date_str
-            )
-            secondary = f"{size_str} | {suffix}"
-            secondary_rect = QRect(
-                text_left,
-                meta_rect.bottom() + 2,
-                available_width,
-                meta_fm.height() + 2
-            )
-            painter.drawText(
-                secondary_rect,
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                meta_fm.elidedText(secondary, Qt.TextElideMode.ElideRight, available_width)
-            )
-        
         painter.restore()
-    
+
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
-        return QSize(option.rect.width(), ROW_HEIGHT)
+        width = self._viewport_width(option)
+        return QSize(width, item_row_height(width))
 
 
 class LibrarySortFilterProxy(QSortFilterProxyModel):
@@ -366,6 +351,14 @@ class LibrarySortFilterProxy(QSortFilterProxyModel):
     def apply_sort(self) -> None:
         self.invalidate()
         self.sort(0, self._sort_order)
+
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):  # type: ignore[override]
+        if role == Qt.ItemDataRole.ToolTipRole and index.isValid():
+            model = self.sourceModel()
+            source = self.mapToSource(index)
+            if isinstance(model, QFileSystemModel) and source.isValid():
+                return library_path_tooltip(model.fileInfo(source).absoluteFilePath())
+        return super().data(index, role)
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:  # type: ignore[override]
         model = self.sourceModel()
@@ -458,7 +451,7 @@ class ImageLibraryProperties(QWidget):
             return
         info = QFileInfo(str(file_path))
         self._name_label.setText(f"Name: {info.fileName()}")
-        self._name_label.setToolTip(info.fileName())
+        self._name_label.setToolTip(library_path_tooltip(str(file_path)))
         self._size_label.setText(f"Size: {format_file_size(info.size())}")
         self._modified_label.setText(f"Modified: {info.lastModified().toString(DATE_FORMAT)}")
 
@@ -531,14 +524,13 @@ class ImageLibraryPanel(QWidget):
         header.addWidget(self.refresh_button)
         layout.addLayout(header)
 
-        # Custom delegate for thumbnails and date display
         self._delegate = ImageLibraryDelegate(self._thumbnail_cache, self)
-        
+
         self.list_view = QListView()
         self.list_view.setViewMode(QListView.ViewMode.ListMode)
         self.list_view.setResizeMode(QListView.ResizeMode.Adjust)
         self.list_view.setMovement(QListView.Movement.Static)
-        self.list_view.setSpacing(2)
+        self.list_view.setSpacing(6)
         self.list_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_view.setUniformItemSizes(True)
         self.list_view.setWrapping(False)
@@ -547,6 +539,9 @@ class ImageLibraryPanel(QWidget):
         self.list_view.setDragEnabled(True)
         self.list_view.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         self.list_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.list_view.setMouseTracking(True)
+        self.list_view.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_view.setModel(self._proxy)
         layout.addWidget(self.list_view, 1)
 
@@ -588,6 +583,7 @@ class ImageLibraryPanel(QWidget):
         self.sort_combo.currentIndexChanged.connect(self._handle_sort_change)
         self.export_button.clicked.connect(self.exportRequested.emit)
         self.list_view.doubleClicked.connect(self._handle_activation)
+        self.list_view.customContextMenuRequested.connect(self._show_item_context_menu)
         selection_model = self.list_view.selectionModel()
         if selection_model:
             selection_model.selectionChanged.connect(self._handle_selection_changed)
@@ -612,22 +608,36 @@ class ImageLibraryPanel(QWidget):
             presets.append((resolved.name or key, resolved))
         return presets
 
-    def _handle_selection_changed(self, *_args) -> None:
-        index = self.list_view.currentIndex()
+    def _path_for_index(self, index: QModelIndex) -> Optional[str]:
         if not index.isValid():
-            self.properties_widget.update_metadata(None)
-            return
-        source_index = self._proxy.mapToSource(index)
-        path = Path(self._model.filePath(source_index))
-        self.properties_widget.update_metadata(path)
-
-    def _handle_activation(self, index: QModelIndex) -> None:
-        if not index.isValid():
-            return
+            return None
         source_index = self._proxy.mapToSource(index)
         file_path = self._model.filePath(source_index)
+        return file_path or None
+
+    def _handle_selection_changed(self, *_args) -> None:
+        file_path = self._path_for_index(self.list_view.currentIndex())
+        self.properties_widget.update_metadata(Path(file_path) if file_path else None)
+
+    def _handle_activation(self, index: QModelIndex) -> None:
+        file_path = self._path_for_index(index)
         if file_path:
             self.assetActivated.emit(file_path)
+
+    def _show_item_context_menu(self, pos) -> None:
+        file_path = self._path_for_index(self.list_view.indexAt(pos))
+        if not file_path:
+            return
+        menu = QMenu(self)
+        copy_action = menu.addAction("Copy path")
+        copy_action.setToolTip(library_path_tooltip(file_path))
+        chosen = menu.exec(self.list_view.viewport().mapToGlobal(pos))
+        if chosen == copy_action:
+            copy_library_path_to_clipboard(file_path)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self.list_view.doItemsLayout()
 
     def _handle_sort_change(self, idx: int) -> None:
         data = self.sort_combo.itemData(idx)
