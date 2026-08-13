@@ -1204,13 +1204,6 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
         if start_size <= 0:
             start_size = 12.0
         self._rs_start_font = start_size
-        # #region agent log
-        try:
-            with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "I", "location": "main.py:CanvasTextItem.handle_resize_press", "message": "text resize press", "data": {"idx": idx, "corner": bool(idx in HANDLE_CORNERS), "start_width": round(self._rs_start_width, 2), "start_height": round(self._rs_start_height, 2), "start_font": round(start_size, 2)}, "timestamp": int(time.time() * 1000)}) + "\n")
-        except Exception:
-            pass
-        # #endregion
 
     def handle_resize_drag(self, handle, scene_pos):
         idx = getattr(self, "_rs_idx", None)
@@ -1279,36 +1272,6 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
         self._update_transform_origin()
         if getattr(self, "handles", None):
             self.handles.update_handles()
-        # #region agent log
-        try:
-            br = self.boundingRect()
-            sbr = self.sceneBoundingRect()
-            native = QGraphicsTextItem.boundingRect(self)
-            handles = getattr(self, "handles", None)
-            handle_pts = []
-            expected = []
-            if handles:
-                for h in handles.resize_handles:
-                    handle_pts.append([round(h.pos().x(), 2), round(h.pos().y(), 2)])
-                pts = [
-                    br.topLeft(),
-                    br.topRight(),
-                    br.bottomRight(),
-                    br.bottomLeft(),
-                    br.topLeft() + QPointF(br.width() / 2, 0),
-                    br.topLeft() + QPointF(br.width(), br.height() / 2),
-                    br.topLeft() + QPointF(br.width() / 2, br.height()),
-                    br.topLeft() + QPointF(0, br.height() / 2),
-                ]
-                expected = [
-                    [round(self.mapToScene(p).x(), 2), round(self.mapToScene(p).y(), 2)]
-                    for p in pts
-                ]
-            with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "L", "location": "main.py:CanvasTextItem.handle_resize_release", "message": "text resize release", "data": {"idx": getattr(handle, "handle_index", None), "width": round(self.textWidth(), 2), "font": round(self.font().pointSizeF(), 2), "box_height": round(float(self._box_height or 0), 2), "native_h": round(native.height(), 2), "slack": round(float(self._box_height or 0) - native.height(), 2), "user_h": bool(getattr(self, "_user_box_height", False)), "box": [round(br.x(), 2), round(br.y(), 2), round(br.width(), 2), round(br.height(), 2)], "scene_box": [round(sbr.x(), 2), round(sbr.y(), 2), round(sbr.width(), 2), round(sbr.height(), 2)], "handles": handle_pts, "expected": expected, "pos": [round(self.pos().x(), 2), round(self.pos().y(), 2)]}, "timestamp": int(time.time() * 1000)}) + "\n")
-        except Exception:
-            pass
-        # #endregion
 
     def _active_view_tool(self):
         scene = self.scene()
@@ -1328,39 +1291,14 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
         return tool in (ToolType.SELECT, ToolType.MOVE)
 
     def mousePressEvent(self, event):
-        # #region agent log
-        try:
-            with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "A,C", "location": "main.py:CanvasTextItem.mousePressEvent", "message": "text item press", "data": {"editing": bool(self._editing), "interaction": str(self.textInteractionFlags()), "movable": bool(self.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable), "selected": bool(self.isSelected()), "has_handles": bool(getattr(self, "handles", None)), "pos": [round(self.pos().x(), 2), round(self.pos().y(), 2)], "focus": bool(self.hasFocus()), "accepted": bool(event.isAccepted()), "move_as_object": bool(self._should_move_as_object())}, "timestamp": int(time.time() * 1000)}) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        self._dbg_text_move_n = 0
         if self._should_move_as_object():
             if self._editing:
                 self.leave_edit_mode()
             QGraphicsItem.mousePressEvent(self, event)
         else:
             super().mousePressEvent(event)
-        # #region agent log
-        try:
-            with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "A", "location": "main.py:CanvasTextItem.mousePressEvent:after_super", "message": "text item press after super", "data": {"accepted": bool(event.isAccepted()), "editing": bool(self._editing), "interaction": str(self.textInteractionFlags())}, "timestamp": int(time.time() * 1000)}) + "\n")
-        except Exception:
-            pass
-        # #endregion
 
     def mouseMoveEvent(self, event):
-        # #region agent log
-        n = getattr(self, "_dbg_text_move_n", 0)
-        if n < 2:
-            self._dbg_text_move_n = n + 1
-            try:
-                with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                    _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "A,E", "location": "main.py:CanvasTextItem.mouseMoveEvent", "message": "text item move", "data": {"n": n + 1, "buttons": str(event.buttons()), "accepted": bool(event.isAccepted()), "pos": [round(self.pos().x(), 2), round(self.pos().y(), 2)], "editing": bool(self._editing), "interaction": str(self.textInteractionFlags())}, "timestamp": int(time.time() * 1000)}) + "\n")
-            except Exception:
-                pass
-        # #endregion
         if not self._editing:
             QGraphicsItem.mouseMoveEvent(self, event)
             return
@@ -1371,17 +1309,6 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
             QGraphicsItem.mouseReleaseEvent(self, event)
             return
         super().mouseReleaseEvent(event)
-
-    def itemChange(self, change, value):
-        # #region agent log
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
-            try:
-                with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                    _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "A,E", "location": "main.py:CanvasTextItem.itemChange", "message": "text position changed", "data": {"pos": [round(self.pos().x(), 2), round(self.pos().y(), 2)]}, "timestamp": int(time.time() * 1000)}) + "\n")
-            except Exception:
-                pass
-        # #endregion
-        return super().itemChange(change, value)
 
 
 class SelectionOverlay(QGraphicsRectItem):
@@ -2993,13 +2920,6 @@ class CanvasView(QGraphicsView):
         self._smooth_zoom_last_ms = 0
         bg_name = self.main_window.settings.value("view/background_color", "#d7dde5")
         self.set_view_background(QColor(str(bg_name)))
-        # #region agent log
-        try:
-            with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "F", "location": "main.py:CanvasView.__init__", "message": "patched canvas view started", "data": {"argv": sys.argv[:3], "file": __file__}, "timestamp": int(time.time() * 1000)}) + "\n")
-        except Exception:
-            pass
-        # #endregion
 
     def _set_blur_strength(self, blur_items):
         """Live slider to dial blur strength across selected blur items."""
@@ -3405,17 +3325,6 @@ class CanvasView(QGraphicsView):
 
         scene_pos = self.mapToScene(event.pos())
         clicked_item = self.itemAt(event.pos())
-        # #region agent log
-        if event.button() == Qt.MouseButton.LeftButton:
-            try:
-                _hit = clicked_item
-                _owner = getattr(_hit, "parent_item", None) if _hit is not None else None
-                _text = _hit if isinstance(_hit, CanvasTextItem) else (_owner if isinstance(_owner, CanvasTextItem) else None)
-                with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                    _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "A,B,C,D,E", "location": "main.py:CanvasView.mousePressEvent", "message": "view press", "data": {"tool": str(self.current_tool), "clicked": type(_hit).__name__ if _hit is not None else None, "owner": type(_owner).__name__ if _owner is not None else None, "dragMode": str(self.dragMode()), "text": None if _text is None else {"editing": bool(_text._editing), "interaction": str(_text.textInteractionFlags()), "movable": bool(_text.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable), "selected": bool(_text.isSelected()), "has_handles": bool(getattr(_text, "handles", None)), "pos": [round(_text.pos().x(), 2), round(_text.pos().y(), 2)], "focus": bool(_text.hasFocus())}}, "timestamp": int(time.time() * 1000)}) + "\n")
-            except Exception:
-                pass
-        # #endregion
 
         if event.button() == Qt.MouseButton.RightButton:
             self._selection_magnifier.hide()
@@ -3462,13 +3371,6 @@ class CanvasView(QGraphicsView):
             return
         if self.current_tool == ToolType.SELECT and event.button() == Qt.MouseButton.LeftButton:
             if self._handle_object_select_press(event, clicked_item):
-                # #region agent log
-                try:
-                    with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                        _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "B", "location": "main.py:CanvasView.mousePressEvent:select_swallowed", "message": "pointer press swallowed before super", "data": {"clicked": type(clicked_item).__name__ if clicked_item is not None else None}, "timestamp": int(time.time() * 1000)}) + "\n")
-                except Exception:
-                    pass
-                # #endregion
                 return
 
         if self.current_tool in (ToolType.RECTANGLE, ToolType.ELLIPSE,
@@ -3515,13 +3417,6 @@ class CanvasView(QGraphicsView):
         elif self.current_tool == ToolType.TEXT:
             existing_text = self._text_item_at(scene_pos, clicked_item)
             if existing_text is not None:
-                # #region agent log
-                try:
-                    with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                        _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "G,H", "location": "main.py:CanvasView.mousePressEvent:text_reuse", "message": "text tool edit existing box", "data": {"editing": bool(existing_text._editing), "clicked": type(clicked_item).__name__ if clicked_item is not None else None, "pos": [round(existing_text.pos().x(), 2), round(existing_text.pos().y(), 2)]}, "timestamp": int(time.time() * 1000)}) + "\n")
-                except Exception:
-                    pass
-                # #endregion
                 if not existing_text.isSelected():
                     self.scene().clearSelection()
                     existing_text.setSelected(True)
@@ -3531,13 +3426,6 @@ class CanvasView(QGraphicsView):
                 else:
                     event.accept()
                 return
-            # #region agent log
-            try:
-                with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                    _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "G,H", "location": "main.py:CanvasView.mousePressEvent:text_create", "message": "text tool create new", "data": {"clicked": type(clicked_item).__name__ if clicked_item is not None else None}, "timestamp": int(time.time() * 1000)}) + "\n")
-            except Exception:
-                pass
-            # #endregion
             text_item = CanvasTextItem("Text")
             text_item.setPos(scene_pos)
             text_item.setFont(QFont("Arial", 12))
@@ -3563,14 +3451,6 @@ class CanvasView(QGraphicsView):
                     self._start_scale = item.scale()
             return
 
-        # #region agent log
-        if event.button() == Qt.MouseButton.LeftButton and self.current_tool in (ToolType.SELECT, ToolType.MOVE):
-            try:
-                with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                    _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "B,E", "location": "main.py:CanvasView.mousePressEvent:super", "message": "view forwarding press to scene", "data": {"tool": str(self.current_tool), "clicked": type(clicked_item).__name__ if clicked_item is not None else None}, "timestamp": int(time.time() * 1000)}) + "\n")
-            except Exception:
-                pass
-        # #endregion
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -4406,13 +4286,6 @@ class CanvasView(QGraphicsView):
         if not target:
             target = self._layer_item_from_hit(clicked_item, layer_items)
         if not target:
-            # #region agent log
-            try:
-                with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                    _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "B,D", "location": "main.py:_handle_object_select_press", "message": "no layer target", "data": {"clicked": type(clicked_item).__name__ if clicked_item is not None else None}, "timestamp": int(time.time() * 1000)}) + "\n")
-            except Exception:
-                pass
-            # #endregion
             return False
 
         additive = bool(event.modifiers() & (
@@ -4424,24 +4297,10 @@ class CanvasView(QGraphicsView):
             return True
 
         if target.isSelected():
-            # #region agent log
-            try:
-                with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                    _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "B", "location": "main.py:_handle_object_select_press", "message": "already selected, pass to super", "data": {"target": type(target).__name__, "is_text": isinstance(target, CanvasTextItem)}, "timestamp": int(time.time() * 1000)}) + "\n")
-            except Exception:
-                pass
-            # #endregion
             return False
 
         self.scene().clearSelection()
         target.setSelected(True)
-        # #region agent log
-        try:
-            with open("/home/luke/dev/CanvasForge/.cursor/debug-96060c.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "96060c", "hypothesisId": "B", "location": "main.py:_handle_object_select_press", "message": "first-click select, fall through", "data": {"target": type(target).__name__, "is_text": isinstance(target, CanvasTextItem), "has_handles": bool(getattr(target, "handles", None))}, "timestamp": int(time.time() * 1000)}) + "\n")
-        except Exception:
-            pass
-        # #endregion
         return False
 
     def _text_item_at(self, scene_pos, clicked_item=None):
@@ -6604,7 +6463,6 @@ class MainWindow(QMainWindow):
         self.artifact_list = ArtifactList()
         self.view = CanvasView(self.scene, self.artifact_list, self)
         self.view.cursorMoved.connect(self.update_cursor_status)
-        self._status_bar.showMessage("Text-move debug build — drag a text box with Pointer or Move", 8000)
         self.view.itemAdded.connect(self.add_item_to_canvas)
 
         self.right_panel = QWidget()
