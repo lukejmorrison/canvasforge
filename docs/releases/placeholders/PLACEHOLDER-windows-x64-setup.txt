@@ -1,0 +1,10 @@
+CanvasForge Windows x64 installer — not in this release yet.
+
+Status: Phase 1 (help wanted)
+Planned asset: CanvasForge-<version>-windows-x64-setup.exe
+
+Install today on Omarchy / Arch:
+  yay -S canvasforge-beta
+
+Roadmap: https://github.com/lukejmorrison/canvasforge/blob/master/ROADMAP.md
+Packaging help: https://github.com/lukejmorrison/canvasforge/discussions

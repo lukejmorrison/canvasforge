@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Per-OS release placeholders:** GitHub Release v0.6.0-beta.10 lists Linux (ready) plus Windows, macOS, AppImage, Android, and iOS placeholder assets.
 - **README home page:** Centred logo, Grok Imagine product shots, AUR and GitHub release install links, public [ROADMAP.md](ROADMAP.md), and a Discussions-first [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## [0.6.0-beta.10] - 2026-08-12
