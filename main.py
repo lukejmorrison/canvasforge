@@ -32,7 +32,8 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QDialog, QDialogButtonBox, QTabWidget, QFormLayout, QLineEdit,
              QPushButton, QHBoxLayout, QGroupBox, QFrame, QComboBox, QCheckBox,
              QToolButton, QTableWidget, QTableWidgetItem, QHeaderView, QInputDialog,
-             QMessageBox, QGraphicsBlurEffect, QSlider, QScrollArea, QButtonGroup)
+             QMessageBox, QGraphicsBlurEffect, QSlider, QScrollArea, QButtonGroup,
+             QFontComboBox, QSpinBox, QColorDialog)
 import shutil
 
 __version__ = "0.6.0-beta.10"
@@ -80,7 +81,7 @@ from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
 from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QActionGroup, QPainter, QIcon, QPen, QColor, QBrush,
-                     QFont, QTransform, QClipboard, QImage, QKeySequence, QTextCursor, QPalette,
+                     QFont, QTransform, QClipboard, QImage, QKeySequence, QTextCursor, QTextCharFormat, QPalette,
                      QFontMetrics, QPainterPath, QPolygonF, QCursor, QShortcut, QDesktopServices)
 from PyQt6.QtCore import (Qt, QTimer, QPointF, QPoint, pyqtSignal, QRect, QRectF, QSize, QSettings,
                           QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl, QElapsedTimer)
@@ -1095,6 +1096,8 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
         self.document().contentsChanged.connect(self._update_transform_origin)
         self._box_height = max(36.0, QGraphicsTextItem.boundingRect(self).height())
         self._user_box_height = False
+        self._saved_format_range = None
+        self._saved_format_active = False
         self._update_transform_origin()
 
     def boundingRect(self):
@@ -1130,15 +1133,60 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
     def enter_edit_mode(self, select_all=False):
         if self._editing:
             return
+        self._saved_format_active = False
         self._editing = True
         self.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
         self.setFocus(Qt.FocusReason.MouseFocusReason)
-        cursor = self.textCursor()
         if select_all:
+            cursor = self.textCursor()
             cursor.select(QTextCursor.SelectionType.Document)
-        else:
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-        self.setTextCursor(cursor)
+            self.setTextCursor(cursor)
+
+    def _format_target_cursor(self):
+        cursor = QTextCursor(self.textCursor())
+        if self._editing and cursor.hasSelection():
+            return cursor, "selection"
+        saved = getattr(self, "_saved_format_range", None)
+        if getattr(self, "_saved_format_active", False) and saved and saved[0] != saved[1]:
+            doc_cursor = QTextCursor(self.document())
+            doc_cursor.setPosition(int(saved[0]))
+            doc_cursor.setPosition(int(saved[1]), QTextCursor.MoveMode.KeepAnchor)
+            return doc_cursor, "saved"
+        if self._editing:
+            word = self._word_under_caret()
+            if word is not None:
+                return word, "word"
+            return cursor, "insertion"
+        return None, "box"
+
+    def _word_under_caret(self):
+        cursor = QTextCursor(self.textCursor())
+        pos = cursor.position()
+        text = self.toPlainText()
+        if not text:
+            return None
+        before = text[pos - 1] if pos > 0 else " "
+        after = text[pos] if pos < len(text) else " "
+        if before.isspace() and (pos >= len(text) or after.isspace()):
+            return None
+        word = QTextCursor(cursor)
+        word.select(QTextCursor.SelectionType.WordUnderCursor)
+        selected = word.selectedText().replace("\u2029", " ").strip()
+        if not selected:
+            return None
+        return word
+
+    def _merged_char_format(self, cursor, fmt):
+        merged = QTextCharFormat(cursor.charFormat())
+        merged.merge(fmt)
+        return merged
+
+    def _set_insertion_char_format(self, merged):
+        live = self.textCursor()
+        if live.hasSelection():
+            return
+        live.setCharFormat(merged)
+        self.setTextCursor(live)
 
     def leave_edit_mode(self):
         if not self._editing:
@@ -1153,12 +1201,85 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
     def is_editing(self):
         return self._editing
 
+    @staticmethod
+    def _is_text_format_widget(widget):
+        current = widget
+        while current is not None:
+            if current.property("canvasforge_text_format"):
+                return True
+            current = current.parentWidget()
+        return False
+
+    def apply_char_format(self, color=None, family=None, point_size=None,
+                          bold=None, italic=None, underline=None):
+        target, scope = self._format_target_cursor()
+        fmt = QTextCharFormat()
+        qcolor = None
+        if color is not None:
+            qcolor = QColor(color)
+            if qcolor.isValid():
+                fmt.setForeground(QBrush(qcolor))
+                if scope == "box":
+                    self.setDefaultTextColor(qcolor)
+        if family:
+            fmt.setFontFamily(family)
+        if point_size is not None and float(point_size) > 0:
+            fmt.setFontPointSize(float(point_size))
+        if bold is not None:
+            fmt.setFontWeight(QFont.Weight.Bold if bold else QFont.Weight.Normal)
+        if italic is not None:
+            fmt.setFontItalic(bool(italic))
+        if underline is not None:
+            fmt.setFontUnderline(bool(underline))
+        if scope == "box":
+            doc_cursor = QTextCursor(self.document())
+            doc_cursor.beginEditBlock()
+            doc_cursor.select(QTextCursor.SelectionType.Document)
+            merged = self._merged_char_format(doc_cursor, fmt)
+            doc_cursor.mergeCharFormat(fmt)
+            doc_cursor.endEditBlock()
+            self._set_insertion_char_format(merged)
+            if family or (point_size is not None and float(point_size) > 0):
+                font = QFont(self.font())
+                if family:
+                    font.setFamily(family)
+                if point_size is not None and float(point_size) > 0:
+                    font.setPointSizeF(float(point_size))
+                self.setFont(font)
+            self._saved_format_active = False
+        elif scope == "insertion":
+            cursor = self.textCursor()
+            merged = self._merged_char_format(cursor, fmt)
+            cursor.mergeCharFormat(fmt)
+            cursor.setCharFormat(merged)
+            self.setTextCursor(cursor)
+        else:
+            merged = self._merged_char_format(target, fmt)
+            target.mergeCharFormat(fmt)
+            if scope == "selection":
+                self.setTextCursor(target)
+            else:
+                self._set_insertion_char_format(merged)
+            self._saved_format_active = False
+        self._update_transform_origin()
+        self.update()
+
+    def set_text_colour(self, color):
+        self.apply_char_format(color=color)
+
     def mouseDoubleClickEvent(self, event):
         self.enter_edit_mode()
         super().mouseDoubleClickEvent(event)
 
     def focusOutEvent(self, event):
+        if self._editing:
+            cursor = self.textCursor()
+            if cursor.hasSelection():
+                self._saved_format_range = (cursor.selectionStart(), cursor.selectionEnd())
+                self._saved_format_active = True
         super().focusOutEvent(event)
+        if self._is_text_format_widget(QApplication.focusWidget()):
+            return
         self.leave_edit_mode()
 
     def contextMenuEvent(self, event):
@@ -1292,6 +1413,7 @@ class CanvasTextItem(ContextMenuForwarder, QGraphicsTextItem):
 
     def mousePressEvent(self, event):
         if self._should_move_as_object():
+            self._saved_format_active = False
             if self._editing:
                 self.leave_edit_mode()
             QGraphicsItem.mousePressEvent(self, event)
@@ -2890,6 +3012,7 @@ class CanvasView(QGraphicsView):
         self._cutout_axis = None
         self._cutout_add_space = False
         self._pending_text_edit_item = None
+        self._last_text_item = None
         self._selection_magnifier = SelectionMagnifier(self)
         self._colour_picker_magnifier = ColourPickerMagnifier(self)
         self._pixel_grid_enabled = self.main_window.settings.value(
@@ -3421,18 +3544,14 @@ class CanvasView(QGraphicsView):
                     self.scene().clearSelection()
                     existing_text.setSelected(True)
                 existing_text.enter_edit_mode()
+                self._last_text_item = existing_text
                 if isinstance(clicked_item, CanvasTextItem):
                     super().mousePressEvent(event)
                 else:
                     event.accept()
                 return
-            text_item = CanvasTextItem("Text")
+            text_item = self._new_text_item("Text")
             text_item.setPos(scene_pos)
-            text_item.setFont(QFont("Arial", 12))
-            text_item._update_transform_origin()
-            text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-            text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-            text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
             self.scene().addItem(text_item)
             self.itemAdded.emit(text_item)
             self.scene().clearSelection()
@@ -3922,6 +4041,7 @@ class CanvasView(QGraphicsView):
         if text_item.scene() is not self.scene():
             return
         text_item.enter_edit_mode(select_all=True)
+        self._last_text_item = text_item
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat('application/x-qabstractitemmodeldatalist') or event.mimeData().hasUrls():
@@ -4151,13 +4271,8 @@ class CanvasView(QGraphicsView):
             if self._try_paste_path_from_text(text, scene_pos):
                 return True
             # Do not persist clipboard text to disk (may contain secrets).
-            text_item = CanvasTextItem(text)
+            text_item = self._new_text_item(text)
             text_item.setPos(scene_pos)
-            text_item.setFont(QFont("Arial", 12))
-            text_item._update_transform_origin()
-            text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-            text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-            text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
             self.scene().addItem(text_item)
             self.itemAdded.emit(text_item)
             text_item.enter_edit_mode(select_all=True)
@@ -4302,6 +4417,20 @@ class CanvasView(QGraphicsView):
         self.scene().clearSelection()
         target.setSelected(True)
         return False
+
+    def _new_text_item(self, text="Text", font_pt=12):
+        text_item = CanvasTextItem(text)
+        text_item.setFont(QFont("Arial", font_pt))
+        color = QColor(self.main_window.current_fill_color)
+        if not color.isValid() or color.alpha() == 0:
+            color = QColor("#000000")
+        text_item.set_text_colour(color)
+        text_item._update_transform_origin()
+        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self._last_text_item = text_item
+        return text_item
 
     def _text_item_at(self, scene_pos, clicked_item=None):
         if isinstance(clicked_item, CanvasTextItem):
@@ -4871,7 +5000,8 @@ class CanvasView(QGraphicsView):
             clone.setPen(item.pen())
             clone.setBrush(item.brush())
         elif isinstance(item, QGraphicsTextItem):
-            clone = CanvasTextItem(item.toPlainText())
+            clone = CanvasTextItem("")
+            clone.setHtml(item.toHtml())
             clone.setFont(item.font())
             clone.setDefaultTextColor(item.defaultTextColor())
             clone.setTextWidth(item.textWidth())
@@ -4895,12 +5025,7 @@ class CanvasView(QGraphicsView):
         if item_rect.isEmpty():
             return False
 
-        text_item = CanvasTextItem("Text")
-        text_item.setFont(QFont("Arial", 16))
-        text_item._update_transform_origin()
-        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        text_item = self._new_text_item("Text", font_pt=16)
 
         self.scene().addItem(text_item)
         text_rect = text_item.boundingRect()
@@ -6762,6 +6887,7 @@ class MainWindow(QMainWindow):
     def _setup_details_panel(self, parent_layout):
         self.details_panel = QFrame()
         self.details_panel.setObjectName("toolDetailsPanel")
+        self.details_panel.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.details_panel.setFrameShape(QFrame.Shape.StyledPanel)
         self.details_panel.setStyleSheet("""
             QFrame#toolDetailsPanel {
@@ -6803,7 +6929,8 @@ class MainWindow(QMainWindow):
         current_row = QHBoxLayout()
         current_row.setContentsMargins(0, 0, 0, 0)
         current_row.setSpacing(8)
-        current_row.addWidget(QLabel("Fill:"))
+        self.fill_colour_heading = QLabel("Fill:")
+        current_row.addWidget(self.fill_colour_heading)
         self.fill_colour_preview = QLabel()
         self.fill_colour_preview.setFixedSize(30, 22)
         current_row.addWidget(self.fill_colour_preview)
@@ -6841,8 +6968,9 @@ class MainWindow(QMainWindow):
                 btn.setFixedSize(28, 28)
                 btn.setIcon(self._colour_swatch_icon(color, QSize(20, 20)))
                 btn.setIconSize(QSize(20, 20))
+                btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 btn.clicked.connect(
-                    lambda _checked=False, c=QColor(color), n=label: self.set_fill_color(c, n)
+                    lambda checked=False, c=QColor(color), n=label: checked and self.set_fill_color(c, n)
                 )
                 self._fill_swatch_group.addButton(btn)
                 self._fill_swatch_buttons.append((btn, QColor(color)))
@@ -6854,9 +6982,62 @@ class MainWindow(QMainWindow):
         custom_row.setContentsMargins(0, 0, 0, 0)
         custom_row.addStretch()
         custom_btn = QPushButton("Custom...")
+        custom_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         custom_btn.clicked.connect(self._choose_fill_colour)
         custom_row.addWidget(custom_btn)
         layout.addLayout(custom_row)
+
+        self._text_format_box = QWidget()
+        self._text_format_box.setProperty("canvasforge_text_format", True)
+        fmt_layout = QVBoxLayout(self._text_format_box)
+        fmt_layout.setContentsMargins(0, 6, 0, 0)
+        fmt_layout.setSpacing(6)
+        style_row = QHBoxLayout()
+        style_row.setContentsMargins(0, 0, 0, 0)
+        style_row.setSpacing(4)
+        self._text_bold_btn = QToolButton()
+        self._text_bold_btn.setText("B")
+        self._text_bold_btn.setCheckable(True)
+        self._text_bold_btn.setToolTip("Bold")
+        self._text_bold_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._text_bold_btn.setFixedSize(28, 28)
+        self._text_bold_btn.clicked.connect(lambda checked: self._apply_text_style(bold=bool(checked)))
+        self._text_italic_btn = QToolButton()
+        self._text_italic_btn.setText("I")
+        self._text_italic_btn.setCheckable(True)
+        self._text_italic_btn.setToolTip("Italic")
+        self._text_italic_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._text_italic_btn.setFixedSize(28, 28)
+        self._text_italic_btn.clicked.connect(lambda checked: self._apply_text_style(italic=bool(checked)))
+        self._text_underline_btn = QToolButton()
+        self._text_underline_btn.setText("U")
+        self._text_underline_btn.setCheckable(True)
+        self._text_underline_btn.setToolTip("Underline")
+        self._text_underline_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._text_underline_btn.setFixedSize(28, 28)
+        self._text_underline_btn.clicked.connect(lambda checked: self._apply_text_style(underline=bool(checked)))
+        style_row.addWidget(self._text_bold_btn)
+        style_row.addWidget(self._text_italic_btn)
+        style_row.addWidget(self._text_underline_btn)
+        style_row.addStretch()
+        fmt_layout.addLayout(style_row)
+        font_row = QHBoxLayout()
+        font_row.setContentsMargins(0, 0, 0, 0)
+        font_row.setSpacing(6)
+        self._text_font_combo = QFontComboBox()
+        self._text_font_combo.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self._text_font_combo.setMaximumWidth(160)
+        self._text_font_combo.activated.connect(self._on_text_font_family)
+        self._text_size_spin = QSpinBox()
+        self._text_size_spin.setRange(6, 512)
+        self._text_size_spin.setValue(12)
+        self._text_size_spin.setSuffix(" pt")
+        self._text_size_spin.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self._text_size_spin.valueChanged.connect(self._on_text_font_size)
+        font_row.addWidget(self._text_font_combo, 1)
+        font_row.addWidget(self._text_size_spin)
+        fmt_layout.addLayout(font_row)
+        layout.addWidget(self._text_format_box)
 
         parent_layout.addWidget(self.details_panel, 0)
         self._refresh_fill_palette()
@@ -6887,7 +7068,13 @@ class MainWindow(QMainWindow):
             self.tool_details_title.setText(
                 f"Details - {self._tool_display_name(tool)} Tool - Colour Selector Palette"
             )
+        if hasattr(self, "fill_colour_heading"):
+            show_text = tool == ToolType.TEXT or any(
+                isinstance(item, CanvasTextItem) for item in self.scene.selectedItems()
+            )
+            self.fill_colour_heading.setText("Text:" if show_text else "Fill:")
         self._refresh_fill_palette()
+        self._sync_text_format_controls()
 
     def sync_tool_action_checked(self, tool):
         actions = getattr(self, "_tool_actions_by_type", None)
@@ -6898,7 +7085,6 @@ class MainWindow(QMainWindow):
             action.setChecked(True)
 
     def _choose_fill_colour(self):
-        from PyQt6.QtWidgets import QColorDialog
         chosen = QColorDialog.getColor(
             self.current_fill_color,
             self,
@@ -6991,11 +7177,110 @@ class MainWindow(QMainWindow):
         self.settings.setValue("tools/fill_color", settings_value)
         self.view.invalidate_fill_cursor()
         self._refresh_fill_palette()
-        self._status_bar.showMessage(
-            f"Fill colour set to {self.fill_color_label()} from {source}",
-            5000,
-        )
+        applied_text = self._apply_colour_to_selected_text(qcolor)
+        if applied_text:
+            self._status_bar.showMessage(
+                f"Text colour set to {self.fill_color_label()} from {source}",
+                5000,
+            )
+        else:
+            self._status_bar.showMessage(
+                f"Fill colour set to {self.fill_color_label()} from {source}",
+                5000,
+            )
         return True
+
+    def _apply_colour_to_selected_text(self, color):
+        items = self._text_format_items()
+        for item in items:
+            item.set_text_colour(color)
+        self._sync_text_format_controls()
+        return bool(items)
+
+    def _apply_text_style(self, **kwargs):
+        applied = False
+        for item in self._text_format_items():
+            item.apply_char_format(**kwargs)
+            applied = True
+        self._sync_text_format_controls()
+        return applied
+
+    def _on_text_font_family(self, _index=0):
+        family = self._text_font_combo.currentFont().family()
+        self._apply_text_style(family=family)
+
+    def _on_text_font_size(self, value):
+        self._apply_text_style(point_size=value)
+
+    def _text_format_items(self):
+        view = getattr(self, "view", None)
+        scene = view.scene() if view is not None else None
+        if scene is None:
+            return []
+        items = []
+        seen = set()
+
+        def add(item):
+            if not isinstance(item, CanvasTextItem) or id(item) in seen:
+                return
+            if sip.isdeleted(item):
+                return
+            seen.add(id(item))
+            items.append(item)
+
+        for item in scene.selectedItems():
+            add(item)
+        add(scene.focusItem())
+        for item in scene.items():
+            if isinstance(item, CanvasTextItem) and item.is_editing():
+                add(item)
+        add(getattr(view, "_pending_text_edit_item", None))
+        selected_content = [
+            item for item in scene.selectedItems()
+            if not isinstance(item, (ResizeHandle, RotateHandle))
+        ]
+        if not items and not selected_content:
+            add(getattr(view, "_last_text_item", None))
+        return items
+
+    def _sync_text_format_controls(self):
+        if not hasattr(self, "_text_format_box"):
+            return
+        items = self._text_format_items()
+        tool = getattr(self.view, "current_tool", None) if getattr(self, "view", None) else None
+        self._text_format_box.setVisible(bool(items) or tool == ToolType.TEXT)
+        if not items:
+            return
+        item = items[0]
+        target, scope = item._format_target_cursor()
+        if target is not None:
+            fmt = target.charFormat()
+        else:
+            fmt = item.textCursor().charFormat()
+            if scope == "box" and item.document().characterCount() > 1:
+                doc_cursor = QTextCursor(item.document())
+                doc_cursor.movePosition(QTextCursor.MoveOperation.Start)
+                fmt = doc_cursor.charFormat()
+        font = fmt.font() if fmt.font().family() else item.font()
+        self._text_bold_btn.blockSignals(True)
+        self._text_italic_btn.blockSignals(True)
+        self._text_underline_btn.blockSignals(True)
+        self._text_font_combo.blockSignals(True)
+        self._text_size_spin.blockSignals(True)
+        self._text_bold_btn.setChecked(font.weight() >= int(QFont.Weight.Bold))
+        self._text_italic_btn.setChecked(font.italic())
+        self._text_underline_btn.setChecked(fmt.fontUnderline() or font.underline())
+        self._text_font_combo.setCurrentFont(font)
+        size = font.pointSizeF()
+        if size <= 0:
+            size = item.font().pointSizeF()
+        if size > 0:
+            self._text_size_spin.setValue(int(round(size)))
+        self._text_bold_btn.blockSignals(False)
+        self._text_italic_btn.blockSignals(False)
+        self._text_underline_btn.blockSignals(False)
+        self._text_font_combo.blockSignals(False)
+        self._text_size_spin.blockSignals(False)
 
     def activate_colour_picker_tool(self):
         if sys.platform.startswith("linux") and (
@@ -7647,6 +7932,7 @@ class MainWindow(QMainWindow):
             # Handle case where scene or items are deleted
             pass
         self.layer_list.blockSignals(False)
+        self._sync_text_format_controls()
 
     def flatten_selected(self):
         items = self._selected_layer_items()
