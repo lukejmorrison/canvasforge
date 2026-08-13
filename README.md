@@ -6,7 +6,9 @@
 
 **The polished screenshot annotation canvas for Omarchy Arch Linux + Hyprland.**
 
-CanvasForge is a fast PyQt6 canvas made for turning raw screenshots into beautiful, documentation-ready visuals. It shines brightest on **Omarchy**, where it integrates deeply as a first-class screenshot editor, scratchpad citizen, and Grok TUI companion.
+CanvasForge is a native desktop app. You install it on your machine and it runs locally — it is not a website and not a hosted web app.
+
+It is a fast PyQt6 canvas made for turning raw screenshots into beautiful, documentation-ready visuals. It shines brightest on **Omarchy**, where it integrates deeply as a first-class screenshot editor, scratchpad citizen, and Grok TUI companion.
 
 ## 🚀 Omarchy Integration (First-Class Citizen)
 
@@ -19,6 +21,19 @@ CanvasForge is designed from the ground up to feel native on Omarchy Arch Linux:
 - **HiDPI & Fractional Scaling** — Proper support for modern high-DPI and scaled displays common in Omarchy setups.
 
 See the [full Omarchy setup guide](#omarchy-setup) below.
+
+## Downloads
+
+| Platform | Status | How |
+|----------|--------|-----|
+| Omarchy / Arch Linux | Ready | `yay -S canvasforge-beta` (press Enter at the prompts) |
+| Other Linux | Ready | [Flatpak](#other-systems) or [local / source install](#other-systems) |
+| macOS Intel | Ready to build | [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) on a Mac |
+| Windows | Planned | [Roadmap — Phase 1](ROADMAP.md#phase-1--desktop-packages-help-wanted) |
+| macOS Apple Silicon | Planned | [Roadmap — Phase 1](ROADMAP.md#phase-1--desktop-packages-help-wanted) |
+| Android / iOS | Later | [Roadmap — Phase 2 and 3](ROADMAP.md#phase-2--mobile-sister-app) |
+
+GitHub [Releases](https://github.com/lukejmorrison/canvasforge/releases) currently publish the source tarball that AUR consumes. Phase 1 adds Windows, macOS, and Linux installers as assets on the same release.
 
 ## ✨ Features
 
@@ -208,7 +223,29 @@ This makes `Super + S` (scratchpad toggle) bring up CanvasForge on the monitor y
 - `artifacts/` – Sample vector callouts bundled for quick use.
 - `packaging/aur/canvasforge-beta/` – AUR beta package recipe and release checklist.
 - `requirements.txt` – Runtime dependencies (currently only PyQt6).
+- [`ROADMAP.md`](ROADMAP.md) – Platform roadmap (desktop packages, mobile companion).
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) – Discussions, Issues, and pull requests.
+- [`docs/targets.md`](docs/targets.md) – What to build locally vs on CI.
+
+## Roadmap
+
+CanvasForge stays a native app: one repo, one version, native packages per OS. The desktop editor remains PyQt6. A phone app, when it exists, is a companion that sends captures to the desktop — not a rewrite and not a hosted site.
+
+| Phase | Focus | Status |
+|-------|--------|--------|
+| Now | AUR, Flatpak, macOS Intel `.app` | Ships today |
+| 1 | Windows installer, macOS Apple Silicon, AppImage, multi-asset Releases | Help wanted |
+| 2 | Android companion + QR pairing on LAN / Tailscale | Later |
+| 3 | iOS, optional stores (winget, Homebrew, Flathub) | Last |
+
+Full sequence, non-goals, and how to help: **[ROADMAP.md](ROADMAP.md)**.
 
 ## Contributing
 
-Issues and pull requests are welcome. Please keep screenshots, `pasted_logs/`, and `wizwam-code-review/` folders out of commits as they are environment-specific.
+Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** before you open a pull request.
+
+- **Ideas, questions, and packaging help** go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
+- **Reproducible bugs** go in [Issues](https://github.com/lukejmorrison/canvasforge/issues/new?template=bug.yml).
+- **Code** is a pull request linked to an Issue (tiny docs fixes may link a Discussion).
+
+Keep screenshots, `pasted_logs/`, and `wizwam-code-review/` out of commits. Update [CHANGELOG.md](CHANGELOG.md) for user-facing changes.

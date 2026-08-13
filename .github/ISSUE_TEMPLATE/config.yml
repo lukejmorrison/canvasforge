@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ideas
+    url: https://github.com/lukejmorrison/canvasforge/discussions/new?category=ideas
+    about: Propose a feature or improvement. Start here before writing code.
+  - name: Questions
+    url: https://github.com/lukejmorrison/canvasforge/discussions/new?category=q-a
+    about: Ask how something works or how to install CanvasForge.
+  - name: Packaging
+    url: https://github.com/lukejmorrison/canvasforge/discussions/new?category=q-a&title=Packaging%3A%20
+    about: Windows, macOS, AppImage, AUR, or other install-package help. Start the title with Packaging.
+  - name: Show and tell
+    url: https://github.com/lukejmorrison/canvasforge/discussions/new?category=show-and-tell
+    about: Share a screenshot workflow or a useful setup.
