@@ -15,3 +15,4 @@ dist/
 packaging/aur/**/pkg/
 packaging/aur/**/src/
 packaging/aur/**/*.tar.gz
+.cursor/

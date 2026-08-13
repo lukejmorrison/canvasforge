@@ -20,7 +20,7 @@
 
 <p align="center">
   <a href="https://aur.archlinux.org/packages/canvasforge-beta"><img src="https://img.shields.io/badge/Install-AUR%20canvasforge--beta-1793D1?style=for-the-badge&logo=archlinux&logoColor=white" alt="Install from AUR"></a>
-  <a href="https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.10"><img src="https://img.shields.io/badge/Download-v0.6.0--beta.10-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub release v0.6.0-beta.10"></a>
+  <a href="https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.11"><img src="https://img.shields.io/badge/Download-v0.6.0--beta.10-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub release v0.6.0-beta.11"></a>
   <a href="ROADMAP.md"><img src="https://img.shields.io/badge/Roadmap-Windows%20%2F%20macOS%20%2F%20mobile-FF6B35?style=for-the-badge" alt="Roadmap"></a>
 </p>
 
@@ -29,7 +29,7 @@
   ·
   <a href="https://github.com/lukejmorrison/canvasforge/releases">All GitHub releases</a>
   ·
-  <a href="https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.10">Latest tarball</a>
+  <a href="https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.11">Latest tarball</a>
   ·
   <a href="CONTRIBUTING.md">Contributing</a>
   ·
@@ -87,13 +87,13 @@ Click **Releases** in the GitHub sidebar for the same list. Ready assets downloa
 | OS | Status | Release link |
 |----|--------|----------------|
 | **Linux / Arch / Omarchy** | Ready | [AUR `canvasforge-beta`](https://aur.archlinux.org/packages/canvasforge-beta) |
-| **Linux source tarball** | Ready | [canvasforge-0.6.0-beta.10.tar.gz](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/canvasforge-0.6.0-beta.10.tar.gz) |
-| **Linux AppImage** | Placeholder | [PLACEHOLDER-linux-x86_64.AppImage.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-linux-x86_64.AppImage.txt) |
-| **Windows x64** | Placeholder | [PLACEHOLDER-windows-x64-setup.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-windows-x64-setup.txt) |
-| **macOS Apple Silicon** | Placeholder | [PLACEHOLDER-macos-arm64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-macos-arm64.dmg.txt) |
-| **macOS Intel** | Build on a Mac | [PLACEHOLDER-macos-x64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-macos-x64.dmg.txt) · [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) |
-| **Android** | Placeholder | [PLACEHOLDER-android.apk.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-android.apk.txt) |
-| **iOS** | Placeholder | [PLACEHOLDER-ios.ipa.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-ios.ipa.txt) |
+| **Linux source tarball** | Ready | [canvasforge-0.6.0-beta.11.tar.gz](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.11/canvasforge-0.6.0-beta.11.tar.gz) |
+| **Linux AppImage** | Placeholder | [PLACEHOLDER-linux-x86_64.AppImage.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.11/PLACEHOLDER-linux-x86_64.AppImage.txt) |
+| **Windows x64** | Placeholder | [PLACEHOLDER-windows-x64-setup.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.11/PLACEHOLDER-windows-x64-setup.txt) |
+| **macOS Apple Silicon** | Placeholder | [PLACEHOLDER-macos-arm64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.11/PLACEHOLDER-macos-arm64.dmg.txt) |
+| **macOS Intel** | Build on a Mac | [PLACEHOLDER-macos-x64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.11/PLACEHOLDER-macos-x64.dmg.txt) · [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) |
+| **Android** | Placeholder | [PLACEHOLDER-android.apk.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.11/PLACEHOLDER-android.apk.txt) |
+| **iOS** | Placeholder | [PLACEHOLDER-ios.ipa.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.11/PLACEHOLDER-ios.ipa.txt) |
 | **All releases** | | [github.com/lukejmorrison/canvasforge/releases](https://github.com/lukejmorrison/canvasforge/releases) |
 
 Omarchy / Arch (press Enter at every prompt):
@@ -293,7 +293,10 @@ This makes `Super + S` (scratchpad toggle) bring up CanvasForge on the monitor y
 - `packaging/aur/canvasforge-beta/` – AUR beta package recipe and release checklist.
 - `requirements.txt` – Runtime dependencies (currently only PyQt6).
 - [`ROADMAP.md`](ROADMAP.md) – Platform roadmap (desktop packages, mobile companion).
+- [`TODO.md`](TODO.md) – Issue index (GitHub Issues are the working backlog).
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) – Discussions, Issues, and pull requests.
+- [`docs/github-workflow.md`](docs/github-workflow.md) – Issue → implement → test → ship.
+- [`docs/pwa-platform-plan.md`](docs/pwa-platform-plan.md) – Native packages and mobile companion (not a hosted PWA).
 - [`docs/targets.md`](docs/targets.md) – What to build locally vs on CI.
 - [`docs/images/`](docs/images/) – README product shots (Grok Imagine).
 - [`docs/releases/placeholders/`](docs/releases/placeholders/) – Per-OS GitHub Release placeholder assets.
@@ -315,8 +318,8 @@ Full sequence, non-goals, and how to help: **[ROADMAP.md](ROADMAP.md)**.
 
 Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** before you open a pull request.
 
-- **Ideas, questions, and packaging help** go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
-- **Reproducible bugs** go in [Issues](https://github.com/lukejmorrison/canvasforge/issues/new?template=bug.yml).
-- **Code** is a pull request linked to an Issue (tiny docs fixes may link a Discussion).
+- **Open-ended ideas, questions, and packaging help** go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
+- **Bugs and accepted product work** go in [Issues](https://github.com/lukejmorrison/canvasforge/issues) ([TODO.md](TODO.md) is an index).
+- **Code** is a pull request linked to an Issue (tiny docs fixes may link a Discussion). See [docs/github-workflow.md](docs/github-workflow.md).
 
 Keep screenshots, `pasted_logs/`, and `wizwam-code-review/` out of commits. Update [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
