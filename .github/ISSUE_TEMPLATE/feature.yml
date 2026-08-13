@@ -1,0 +1,53 @@
+name: Feature or fix
+description: Accepted product feature or fix (one Issue per item)
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for work that should land in a beta. Open-ended ideas still start in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions). Pattern: Issue → implement → daily-driver local install → GitHub prerelease + AUR.
+  - type: textarea
+    id: restatement
+    attributes:
+      label: Restatement
+      description: What should the app do when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist someone else can verify.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Likely files
+      description: Paths such as main.py, scripts/, docs/.
+      placeholder: main.py
+  - type: textarea
+    id: test
+    attributes:
+      label: Test plan
+      description: pytest if there is a hook, plus daily-driver steps.
+      value: |
+        Automated: pip install -r requirements-dev.txt && python -m pytest tests/
+        Daily-driver:
+        1. Fully quit CanvasForge
+        2. bash scripts/install_canvasforge.sh --local
+        3. Launch ~/.local/bin/canvasforge (not python main.py, not /usr/bin/canvasforge)
+    validations:
+      required: true
+  - type: dropdown
+    id: beta
+    attributes:
+      label: Target beta
+      options:
+        - 0.6.0-beta.11
+        - 0.6.0-beta.12
+        - packaging (parallel)
+        - pwa-platform (later)
+        - later
+    validations:
+      required: true

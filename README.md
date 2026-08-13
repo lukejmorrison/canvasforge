@@ -293,7 +293,10 @@ This makes `Super + S` (scratchpad toggle) bring up CanvasForge on the monitor y
 - `packaging/aur/canvasforge-beta/` – AUR beta package recipe and release checklist.
 - `requirements.txt` – Runtime dependencies (currently only PyQt6).
 - [`ROADMAP.md`](ROADMAP.md) – Platform roadmap (desktop packages, mobile companion).
+- [`TODO.md`](TODO.md) – Issue index (GitHub Issues are the working backlog).
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) – Discussions, Issues, and pull requests.
+- [`docs/github-workflow.md`](docs/github-workflow.md) – Issue → implement → test → ship.
+- [`docs/pwa-platform-plan.md`](docs/pwa-platform-plan.md) – Native packages and mobile companion (not a hosted PWA).
 - [`docs/targets.md`](docs/targets.md) – What to build locally vs on CI.
 - [`docs/images/`](docs/images/) – README product shots (Grok Imagine).
 - [`docs/releases/placeholders/`](docs/releases/placeholders/) – Per-OS GitHub Release placeholder assets.
@@ -315,8 +318,8 @@ Full sequence, non-goals, and how to help: **[ROADMAP.md](ROADMAP.md)**.
 
 Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** before you open a pull request.
 
-- **Ideas, questions, and packaging help** go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
-- **Reproducible bugs** go in [Issues](https://github.com/lukejmorrison/canvasforge/issues/new?template=bug.yml).
-- **Code** is a pull request linked to an Issue (tiny docs fixes may link a Discussion).
+- **Open-ended ideas, questions, and packaging help** go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
+- **Bugs and accepted product work** go in [Issues](https://github.com/lukejmorrison/canvasforge/issues) ([TODO.md](TODO.md) is an index).
+- **Code** is a pull request linked to an Issue (tiny docs fixes may link a Discussion). See [docs/github-workflow.md](docs/github-workflow.md).
 
 Keep screenshots, `pasted_logs/`, and `wizwam-code-review/` out of commits. Update [CHANGELOG.md](CHANGELOG.md) for user-facing changes.

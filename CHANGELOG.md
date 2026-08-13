@@ -5,7 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **Roadmap and contributing:** Public [ROADMAP.md](ROADMAP.md) for native desktop packages, a later mobile companion, and non-goals (no hosted PWA). [CONTRIBUTING.md](CONTRIBUTING.md) and GitHub templates send ideas and packaging help to Discussions, bugs to Issues, and code to pull requests.
+- **GitHub Issues backlog:** Product features and fixes are tracked as Issues ([TODO.md](TODO.md) is an index). Pattern in [docs/github-workflow.md](docs/github-workflow.md). Native-package / mobile sequence from the PWA question is [docs/pwa-platform-plan.md](docs/pwa-platform-plan.md) (not a hosted web app).
+- **Roadmap and contributing:** Public [ROADMAP.md](ROADMAP.md) for native desktop packages, a later mobile companion, and non-goals (no hosted PWA). [CONTRIBUTING.md](CONTRIBUTING.md) and GitHub templates send open-ended ideas to Discussions, accepted work and bugs to Issues, and code to pull requests.
 - **README product shots:** Hero and how-to images generated with Grok Imagine (`docs/images/`), plus a centred logo and a three-step Print Screen → annotate → Send to Agent walkthrough.
 - **Install package links:** README home page now links the AUR `canvasforge-beta` package, the current GitHub release tarball, and the full releases list.
 - **Per-OS release placeholders:** GitHub Release [v0.6.0-beta.10](https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.10) lists Linux (ready) plus Windows, macOS, AppImage, Android, and iOS placeholder assets so the sidebar Releases page shows every OS.

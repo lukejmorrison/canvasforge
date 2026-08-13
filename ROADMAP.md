@@ -2,7 +2,7 @@
 
 CanvasForge is a **native desktop app**. You install it on your machine and it runs locally. It is not a hosted website and not a Progressive Web App.
 
-This page is the public platform roadmap: how CanvasForge reaches Windows, macOS, more Linux downloads, and later a phone companion. Canvas polish and tool work live in [TODO.md](TODO.md).
+This page is the public platform roadmap: how CanvasForge reaches Windows, macOS, more Linux downloads, and later a phone companion. Canvas polish and tool work are tracked as [GitHub Issues](https://github.com/lukejmorrison/canvasforge/issues) (index: [TODO.md](TODO.md)). The sequenced native-package / mobile plan from the PWA question is [docs/pwa-platform-plan.md](docs/pwa-platform-plan.md).
 
 One GitHub repository. One version tag. Several **release assets** (installers and bundles) plus a few **packages** (AUR today; winget, Homebrew, Flathub later).
 
@@ -71,7 +71,7 @@ Desktop stays PyQt6. The phone is a companion, not a rewrite of [`main.py`](main
 
 ## How to help
 
-1. Read [CONTRIBUTING.md](CONTRIBUTING.md).
-2. Ideas, questions, and packaging offers go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
-3. Confirmed bugs go in [Issues](https://github.com/lukejmorrison/canvasforge/issues).
+1. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/github-workflow.md](docs/github-workflow.md).
+2. Open-ended ideas, questions, and packaging offers go in [Discussions](https://github.com/lukejmorrison/canvasforge/discussions).
+3. Accepted product features, fixes, and bugs go in [Issues](https://github.com/lukejmorrison/canvasforge/issues).
 4. Implementation is a pull request linked to an Issue (or a short Discussion for tiny docs fixes).

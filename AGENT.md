@@ -44,9 +44,7 @@ We treat documentation as a first-class citizen.
     -   New key features are added.
     -   Installation instructions change.
     -   Project structure changes significantly.
--   **`TODO.md`**:
-    -   **Add**: New ideas or future technical debt.
-    -   **Remove/Check**: When completing a task.
+-   **`TODO.md`**: Index of [GitHub Issues](https://github.com/lukejmorrison/canvasforge/issues) (the source of truth). Add an Issue first; then update the index.
 -   **Feature Requests**: See `featurerequest/AGENT.md` for the strict lifecycle.
 
 ## 3. Deployment / Packaging
