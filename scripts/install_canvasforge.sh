@@ -21,9 +21,13 @@ usage() {
     cat <<EOF
 Usage: $0 [--local] [--clean] [--help]
 
+On Omarchy / Arch this installer installs ONLY the AUR package
+canvasforge-beta (not a full system upgrade). At each prompt, press
+Enter to accept the default. You may be asked for your sudo password.
+
 Options:
-  --local   Install from the local checkout instead of GitHub
-  --clean   Remove existing install directory before install
+  --local   Developer install from this checkout (venv, not AUR)
+  --clean   With --local: wipe the previous venv install first
   --help    Show this help message
 EOF
 }
@@ -70,16 +74,79 @@ run_with_retry() {
     done
 }
 
-command -v git >/dev/null 2>&1 || die "git is required but was not found"
-command -v python3 >/dev/null 2>&1 || die "python3 is required but was not found"
-command -v tar >/dev/null 2>&1 || die "tar is required but was not found"
-command -v install >/dev/null 2>&1 || die "install is required but was not found"
+is_arch_like() {
+    if [[ -r /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        if [[ "${ID:-}" == "arch" || "${ID_LIKE:-}" == *arch* ]]; then
+            return 0
+        fi
+        return 1
+    fi
+    command -v pacman >/dev/null 2>&1
+}
+
+aur_helper() {
+    if command -v yay >/dev/null 2>&1; then
+        echo yay
+        return 0
+    fi
+    if command -v paru >/dev/null 2>&1; then
+        echo paru
+        return 0
+    fi
+    return 1
+}
+
+install_aur_canvasforge_beta() {
+    local helper
+    helper="$(aur_helper)" || die "Install yay or paru first, then re-run this script."
+
+    cat <<'EOF'
+
+========================================
+  CanvasForge  —  AUR: canvasforge-beta
+========================================
+
+This installs ONLY CanvasForge from the Arch User Repository.
+It does not upgrade the rest of your system (no gcc rebuilds).
+
+At every prompt, accept the default: press Enter.
+You may be asked for your sudo password once.
+
+EOF
+
+    if [[ "$helper" == "yay" ]]; then
+        "$helper" -S --needed \
+            --answerdiff None \
+            --answeredit None \
+            --answerclean None \
+            --answerupgrade None \
+            canvasforge-beta
+    else
+        "$helper" -S --needed --skipreview canvasforge-beta
+    fi
+
+    echo
+    echo "$APP_NAME installed from AUR. Launch it from the app menu or run 'canvasforge'."
+}
+
 if [[ "$(uname -s)" != "Linux" ]]; then
     if [[ "$(uname -s)" == "Darwin" ]]; then
         die "This installer targets Linux desktops. On macOS build the Intel .app with: bash scripts/build_macos_app.sh"
     fi
     die "This installer targets Linux desktops."
 fi
+
+if [[ "$USE_LOCAL" != true ]] && is_arch_like; then
+    install_aur_canvasforge_beta
+    exit 0
+fi
+
+command -v git >/dev/null 2>&1 || die "git is required but was not found"
+command -v python3 >/dev/null 2>&1 || die "python3 is required but was not found"
+command -v tar >/dev/null 2>&1 || die "tar is required but was not found"
+command -v install >/dev/null 2>&1 || die "install is required but was not found"
 
 mkdir -p "$INSTALL_ROOT"
 

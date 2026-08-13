@@ -42,4 +42,8 @@ Omarchy users can install with:
 yay -S canvasforge-beta
 ```
 
+Press **Enter** at every prompt to accept the defaults. Do not use `yay -Syu` unless you want a full system upgrade.
+
+`bash scripts/install_canvasforge.sh` does the same AUR install and prints that reminder.
+
 Future beta updates are discovered by Omarchy's update flow once the AUR recipe is bumped and pushed.

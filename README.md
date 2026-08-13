@@ -36,13 +36,25 @@ See the [full Omarchy setup guide](#omarchy-setup) below.
 
 ### Omarchy / Arch Linux (Recommended)
 
+Install **only** the CanvasForge AUR package (this does not upgrade the rest of your system):
+
 ```bash
 yay -S canvasforge-beta
 ```
 
-Then just press **Print Screen**. CanvasForge will handle the rest.
+Or from a checkout:
 
-See the [full Omarchy setup](#omarchy-setup) above for scratchpad + multi-monitor configuration.
+```bash
+bash scripts/install_canvasforge.sh
+```
+
+**Press Enter at every prompt** to accept the defaults. You may be asked for your sudo password once.
+
+Do **not** use `yay -Syu canvasforge-beta` unless you intend a full system upgrade (that can rebuild unrelated packages such as gcc).
+
+Then press **Print Screen**. CanvasForge will handle the rest.
+
+See the [full Omarchy setup](#omarchy-setup) below for scratchpad + multi-monitor configuration.
 
 ### Other Systems
 
@@ -90,13 +102,14 @@ bash scripts/install_canvasforge.sh --local
 The installer is robust and works well on Pop!_OS, Fedora, and other distributions.
 
 ```bash
-# Standard install/update from GitHub
+# Arch/Omarchy: AUR package canvasforge-beta only (press Enter at prompts)
+# Other distros: clone from GitHub into a venv
 bash scripts/install_canvasforge.sh
 
-# Full reinstall (recommended when recovering from broken .venv state)
+# Full venv reinstall (non-Arch, or with --local)
 bash scripts/install_canvasforge.sh --clean
 
-# Install from your current local checkout
+# Developer install from your current local checkout (venv, not AUR)
 bash scripts/install_canvasforge.sh --local
 
 # Full reinstall from your current local checkout
@@ -106,7 +119,7 @@ bash scripts/install_canvasforge.sh --local --clean
 bash scripts/install_canvasforge.sh --help
 ```
 
-The installer now auto-heals unhealthy virtual environments and retries Python dependency installs, which makes reinstalls more reliable on Arch/Omarchy systems.
+On Omarchy/Arch, `scripts/install_canvasforge.sh` installs only `canvasforge-beta` from AUR. On other distributions it uses a venv and auto-heals unhealthy environments.
 
 ## Usage Notes
 
