@@ -1,0 +1,11 @@
+CanvasForge macOS Intel DMG — not attached as a prebuilt asset yet.
+
+Status: Ready to build on a Mac (Phase 1 will attach the DMG here)
+Planned asset: CanvasForge-<version>-macos-x64.dmg
+
+Build on macOS 11+ with Intel or universal2 Python 3.11/3.12:
+  bash scripts/build_macos_app.sh
+  open dist/CanvasForge.app
+
+Roadmap: https://github.com/lukejmorrison/canvasforge/blob/master/ROADMAP.md
+Packaging help: https://github.com/lukejmorrison/canvasforge/discussions

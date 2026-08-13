@@ -82,18 +82,19 @@ See the [full Omarchy setup guide](#omarchy-setup) below.
 
 ## Install packages
 
-These are the packages you can install today. Windows, Apple Silicon, and AppImage installers are on the [roadmap](ROADMAP.md) — they are not hosted as a website.
+Click **Releases** in the GitHub sidebar for the same list. Ready assets download; the others are placeholders until that OS ships ([roadmap](ROADMAP.md)).
 
-| Package | Status | Link |
-|---------|--------|------|
-| **AUR `canvasforge-beta`** (Omarchy / Arch) | Ready | [aur.archlinux.org/packages/canvasforge-beta](https://aur.archlinux.org/packages/canvasforge-beta) |
-| **GitHub Release tarball** | Ready | [v0.6.0-beta.10](https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.10) — this is what AUR consumes |
-| **All releases** | Ready | [github.com/lukejmorrison/canvasforge/releases](https://github.com/lukejmorrison/canvasforge/releases) |
-| Other Linux (Flatpak / local venv) | Ready | [Build from this repo](#other-systems) |
-| macOS Intel `.app` / DMG | Ready to build | [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) |
-| Windows installer | Planned | [Roadmap — Phase 1](ROADMAP.md#phase-1--desktop-packages-help-wanted) |
-| macOS Apple Silicon | Planned | [Roadmap — Phase 1](ROADMAP.md#phase-1--desktop-packages-help-wanted) |
-| Android / iOS | Later | [Roadmap — Phase 2 and 3](ROADMAP.md#phase-2--mobile-sister-app) |
+| OS | Status | Release link |
+|----|--------|----------------|
+| **Linux / Arch / Omarchy** | Ready | [AUR `canvasforge-beta`](https://aur.archlinux.org/packages/canvasforge-beta) |
+| **Linux source tarball** | Ready | [canvasforge-0.6.0-beta.10.tar.gz](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/canvasforge-0.6.0-beta.10.tar.gz) |
+| **Linux AppImage** | Placeholder | [PLACEHOLDER-linux-x86_64.AppImage.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-linux-x86_64.AppImage.txt) |
+| **Windows x64** | Placeholder | [PLACEHOLDER-windows-x64-setup.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-windows-x64-setup.txt) |
+| **macOS Apple Silicon** | Placeholder | [PLACEHOLDER-macos-arm64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-macos-arm64.dmg.txt) |
+| **macOS Intel** | Build on a Mac | [PLACEHOLDER-macos-x64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-macos-x64.dmg.txt) · [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) |
+| **Android** | Placeholder | [PLACEHOLDER-android.apk.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-android.apk.txt) |
+| **iOS** | Placeholder | [PLACEHOLDER-ios.ipa.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.10/PLACEHOLDER-ios.ipa.txt) |
+| **All releases** | | [github.com/lukejmorrison/canvasforge/releases](https://github.com/lukejmorrison/canvasforge/releases) |
 
 Omarchy / Arch (press Enter at every prompt):
 
@@ -295,6 +296,7 @@ This makes `Super + S` (scratchpad toggle) bring up CanvasForge on the monitor y
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) – Discussions, Issues, and pull requests.
 - [`docs/targets.md`](docs/targets.md) – What to build locally vs on CI.
 - [`docs/images/`](docs/images/) – README product shots (Grok Imagine).
+- [`docs/releases/placeholders/`](docs/releases/placeholders/) – Per-OS GitHub Release placeholder assets.
 
 ## Roadmap
 

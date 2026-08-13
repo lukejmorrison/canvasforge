@@ -1,0 +1,9 @@
+CanvasForge Android APK — not in this release yet.
+
+Status: Phase 2 (mobile sister app)
+Planned asset: CanvasForge-<version>-android.apk
+
+The phone app will pair to the desktop over LAN or Tailscale. It is not a hosted website.
+
+Roadmap: https://github.com/lukejmorrison/canvasforge/blob/master/ROADMAP.md
+Packaging help: https://github.com/lukejmorrison/canvasforge/discussions

@@ -1,0 +1,9 @@
+CanvasForge iOS IPA — not in this release yet.
+
+Status: Phase 3 (TestFlight / macOS CI)
+Planned asset: CanvasForge-<version>-ios.ipa
+
+iOS signing is a CI/macOS path, not a daily Omarchy build.
+
+Roadmap: https://github.com/lukejmorrison/canvasforge/blob/master/ROADMAP.md
+Packaging help: https://github.com/lukejmorrison/canvasforge/discussions
