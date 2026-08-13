@@ -6,6 +6,7 @@
 - End-user install should be the `canvasforge-beta` AUR package, with prompts that say to press Enter to accept defaults.
 - Ship user-facing updates as a GitHub prerelease plus AUR `canvasforge-beta` so Omarchy can pull them (`omarchy update` / `yay -S canvasforge-beta`).
 - Use British spelling in UI copy (colour, eyedropper).
+- Text boxes should follow Photoshop: Pointer/Move select, drag, and resize; clicking existing text edits it rather than creating another box. Corner handles scale type size; edge handles change box size only.
 
 ## Learned Workspace Facts
 
@@ -14,3 +15,4 @@
 - GitHub repo is `lukejmorrison/canvasforge`; AUR `canvasforge-beta` consumes the GitHub release tarball.
 - On Wayland, `scene.render()` into a viewport-child `paintEvent` causes recursive repaint, hang, and crash; magnifiers must render offscreen first.
 - Canvas checkerboard must use a tiled pixmap; a Python per-tile `fillRect` loop on large canvases (~5800px) takes hundreds of ms per paint and hangs eyedropper hover and selection.
+- CanvasTextItem must leave text interaction off outside edit mode, or pointer drags select characters instead of moving the box. Text edge-handle drags must ignore default aspect-lock (it recentres the unused axis); keep resize handles synced to the live box after type or resize.
