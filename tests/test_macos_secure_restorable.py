@@ -4,82 +4,98 @@ from pathlib import Path
 
 import pytest
 
+import macos_restorable
 import main
 
 
-def _reset_guard():
-    main._macos_secure_restorable_installed = False
+BUNDLE_ID = macos_restorable.BUNDLE_ID
 
 
-def test_guard_is_noop_off_darwin(monkeypatch):
+def _poison_saved_state(home: Path) -> Path:
+    path = (
+        home / "Library" / "Saved Application State" / f"{BUNDLE_ID}.savedState"
+    )
+    path.mkdir(parents=True)
+    (path / "windows.plist").write_text("poison", encoding="utf-8")
+    return path
+
+
+def test_guard_is_noop_off_darwin(monkeypatch, tmp_path):
     monkeypatch.delenv("NSQuitAlwaysKeepsWindows", raising=False)
-    _reset_guard()
-    assert main.install_macos_secure_restorable_state(platform="linux") is False
+    poison = _poison_saved_state(tmp_path)
+    assert macos_restorable.install_macos_secure_restorable_state(
+        platform="linux", home=tmp_path
+    ) is False
     assert "NSQuitAlwaysKeepsWindows" not in os.environ
-    assert main._macos_secure_restorable_installed is False
+    assert poison.exists()
 
 
-def test_guard_disables_restore_when_objc_missing(monkeypatch):
+def test_install_deletes_leftover_saved_state(monkeypatch, tmp_path):
     monkeypatch.delenv("NSQuitAlwaysKeepsWindows", raising=False)
-    monkeypatch.setattr(main, "_install_cocoa_secure_restorable_delegate", lambda: False)
-    _reset_guard()
-    assert main.install_macos_secure_restorable_state(platform="darwin") is False
+    poison = _poison_saved_state(tmp_path)
+    assert macos_restorable.install_macos_secure_restorable_state(
+        platform="darwin", home=tmp_path
+    ) is True
     assert os.environ["NSQuitAlwaysKeepsWindows"] == "NO"
+    assert os.environ["ApplePersistenceIgnoreState"] == "YES"
+    assert not poison.exists()
 
 
-def test_guard_survives_objc_exception(monkeypatch):
-    monkeypatch.delenv("NSQuitAlwaysKeepsWindows", raising=False)
-
-    def _boom():
-        raise RuntimeError("objc unavailable")
-
-    monkeypatch.setattr(main, "_install_cocoa_secure_restorable_delegate", _boom)
-    _reset_guard()
-    assert main.install_macos_secure_restorable_state(platform="darwin") is False
-    assert os.environ["NSQuitAlwaysKeepsWindows"] == "NO"
-
-
-def test_guard_installs_delegate_on_darwin(monkeypatch):
-    monkeypatch.delenv("NSQuitAlwaysKeepsWindows", raising=False)
-    monkeypatch.setattr(main, "_install_cocoa_secure_restorable_delegate", lambda: True)
-    _reset_guard()
-    assert main.install_macos_secure_restorable_state(platform="darwin") is True
-    assert os.environ["NSQuitAlwaysKeepsWindows"] == "NO"
-    assert main._macos_secure_restorable_installed is True
-    # Second call is idempotent and does not re-enter objc.
-    calls = {"n": 0}
-
-    def _should_not_run():
-        calls["n"] += 1
-        return False
-
-    monkeypatch.setattr(main, "_install_cocoa_secure_restorable_delegate", _should_not_run)
-    assert main.install_macos_secure_restorable_state(platform="darwin") is True
-    assert calls["n"] == 0
+def test_discard_only_removes_this_bundle(tmp_path):
+    ours = _poison_saved_state(tmp_path)
+    other = (
+        tmp_path / "Library" / "Saved Application State" / "com.example.Other.savedState"
+    )
+    other.mkdir(parents=True)
+    (other / "windows.plist").write_text("keep", encoding="utf-8")
+    removed = macos_restorable.discard_macos_saved_application_state(
+        platform="darwin", home=tmp_path
+    )
+    assert ours in removed
+    assert not ours.exists()
+    assert other.exists()
 
 
-def test_real_objc_installer_is_safe_without_appkit(monkeypatch):
-    """Linux has no AppKit; the ctypes path must return False, not raise."""
+def test_linux_does_not_touch_real_home(monkeypatch, tmp_path):
+    monkeypatch.setattr(macos_restorable, "is_darwin", lambda platform=None: False)
+    poison = _poison_saved_state(tmp_path)
+    assert macos_restorable.discard_macos_saved_application_state(
+        platform="linux", home=tmp_path
+    ) == []
+    assert poison.exists()
+
+
+def test_persistent_ui_disable_is_safe_without_appkit():
     if sys.platform == "darwin":
         pytest.skip("real AppKit path is exercised on the Mac Mini, not here")
-    monkeypatch.delenv("NSQuitAlwaysKeepsWindows", raising=False)
-    _reset_guard()
-    assert main.install_macos_secure_restorable_state(platform="darwin") is False
-    assert os.environ["NSQuitAlwaysKeepsWindows"] == "NO"
+    macos_restorable._persistent_ui_disabled = False
+    assert macos_restorable.disable_macos_persistent_ui(platform="linux") is False
+    assert macos_restorable.disable_macos_persistent_ui(platform="darwin") is False
 
 
-def test_startup_establishes_guard_before_qapplication():
-    """Monterey aborts if the Cocoa delegate is attached after QApplication()."""
+def test_startup_discards_state_before_qapplication():
     source = Path(main.__file__).read_text(encoding="utf-8")
     main_block = source.split('if __name__ == "__main__":', 1)[1]
-    guard_at = main_block.find("install_macos_secure_restorable_state(")
+    discard_at = main_block.find("install_macos_secure_restorable_state(")
     qapp_at = main_block.find("QApplication(sys.argv)")
-    assert guard_at != -1
+    persistent_at = main_block.find("disable_macos_persistent_ui(")
+    assert discard_at != -1
     assert qapp_at != -1
-    assert guard_at < qapp_at
+    assert persistent_at != -1
+    assert discard_at < qapp_at < persistent_at
 
 
-def test_delegate_selectors_opt_in_and_ignore_saved_state():
-    assert main._MACOS_SECURE_RESTORABLE_SELECTOR == b"applicationSupportsSecureRestorableState:"
-    assert main._MACOS_SHOULD_RESTORE_SELECTOR == b"applicationShouldRestoreApplicationState:"
-    assert main._MACOS_SHOULD_SAVE_SELECTOR == b"applicationShouldSaveApplicationState:"
+def test_startup_does_not_create_nsapplication_before_qapplication():
+    """sharedApplication-then-YES-delegate is the Monterey ASI."""
+    source = Path(main.__file__).read_text(encoding="utf-8")
+    main_block = source.split('if __name__ == "__main__":', 1)[1]
+    before_qapp = main_block.split("QApplication(sys.argv)", 1)[0]
+    assert "sharedApplication" not in before_qapp
+    assert "setDelegate" not in before_qapp
+
+
+def test_spec_disables_argv_emulation_and_registers_rthook():
+    spec = Path(main.__file__).with_name("canvasforge.spec").read_text(encoding="utf-8")
+    assert "argv_emulation=False" in spec
+    assert "pyi_rth_disable_savedstate.py" in spec
+    assert "macos_restorable" in spec
