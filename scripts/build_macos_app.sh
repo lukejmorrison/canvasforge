@@ -23,7 +23,7 @@ source "$VENV_DIR/bin/activate"
 
 python -m pip install --upgrade pip
 # Pin Qt < 6.8 so macOS 11 / 2014-class Minis remain supported.
-python -m pip install "PyQt6>=6.6,<6.8" "pyinstaller>=6.3"
+python -m pip install "PyQt6>=6.6,<6.8" "pyinstaller>=6.3" "Pillow>=10"
 
 rm -rf "$ROOT/build" "$ROOT/dist"
 pyinstaller --noconfirm --clean "$ROOT/canvasforge.spec"

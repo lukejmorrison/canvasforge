@@ -1,11 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec for CanvasForge (macOS Intel x86_64 onedir .app)
 
+import ast
 import sys
 from pathlib import Path
 
 block_cipher = None
 ROOT = Path(SPECPATH)
+
+
+def _bundle_version() -> str:
+    """Read __version__ from main.py so Finder/About match the checkout."""
+    source = (ROOT / "main.py").read_text(encoding="utf-8")
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__version__":
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                        return node.value.value
+    return "0.6.0"
+
+
+BUNDLE_VERSION = _bundle_version()
 
 datas = [
     (str(ROOT / "assets"), "assets"),
@@ -99,8 +115,8 @@ app = BUNDLE(
     info_plist={
         "CFBundleName": "CanvasForge",
         "CFBundleDisplayName": "CanvasForge",
-        "CFBundleShortVersionString": "0.6.0",
-        "CFBundleVersion": "0.6.0",
+        "CFBundleShortVersionString": BUNDLE_VERSION,
+        "CFBundleVersion": BUNDLE_VERSION,
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "11.0",
     },
