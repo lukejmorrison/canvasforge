@@ -32,6 +32,7 @@ package() {
     mobile \
     mobile_qr.py \
     mobile_sync.py \
+    vendor \
     plugin_manager.py \
     plugins \
     requirements.txt \
