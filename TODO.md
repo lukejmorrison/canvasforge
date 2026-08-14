@@ -2,9 +2,9 @@
 
 **Source of truth is [GitHub Issues](https://github.com/lukejmorrison/canvasforge/issues).** This file is an index. Do not add new product work here without opening an Issue first. Historical rows below stay so old links still make sense.
 
-Knock-off order: **0.6.0-beta.11** canvas → **0.6.0-beta.12** (T1, maybe T2) → packaging in parallel → PWA/mobile as its own later track. See [docs/github-workflow.md](docs/github-workflow.md) and [docs/pwa-platform-plan.md](docs/pwa-platform-plan.md).
+Knock-off order: **0.6.0-beta.12** Image Library → **0.6.0-beta.13** (T1, maybe T2) → packaging in parallel → PWA/mobile as its own later track. See [docs/github-workflow.md](docs/github-workflow.md) and [docs/pwa-platform-plan.md](docs/pwa-platform-plan.md).
 
-## 0.6.0-beta.11 (next ship)
+## 0.6.0-beta.11 (shipped)
 
 | ID | Issue | Notes |
 |----|--------|--------|
@@ -13,7 +13,13 @@ Knock-off order: **0.6.0-beta.11** canvas → **0.6.0-beta.12** (T1, maybe T2) �
 | U3 | [#10](https://github.com/lukejmorrison/canvasforge/issues/10) Eyedropper hang / tiled checkerboard | Implemented on HEAD; ships in .11 |
 | U4 | [#11](https://github.com/lukejmorrison/canvasforge/issues/11) AUR installer, README, roadmap | Implemented on HEAD; ships in .11 |
 
-## 0.6.0-beta.12
+## 0.6.0-beta.12 (shipped)
+
+| ID | Issue | Notes |
+|----|--------|--------|
+| IL | [#39](https://github.com/lukejmorrison/canvasforge/issues/39) Image Library large thumbnails, columns, copy path | Ships in .12 |
+
+## 0.6.0-beta.13
 
 | ID | Issue |
 |----|--------|

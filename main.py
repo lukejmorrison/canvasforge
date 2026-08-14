@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QFontComboBox, QSpinBox, QColorDialog)
 import shutil
 
-__version__ = "0.6.0-beta.11"
+__version__ = "0.6.0-beta.12"
 CLIPBOARD_JPEG_MAX_SIDE = 1440
 CLIPBOARD_JPEG_QUALITY = 88
 

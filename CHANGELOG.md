@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0-beta.12] - 2026-08-13
+
 ### Added
 - **Image Library columns:** A **Columns** dropdown next to Sort lets you show 1, 2, or 3 thumbnail columns so more images fit in the sidebar width. One column is a vertical stack of square tiles that fill the sidebar width; 2 and 3 columns share the row.
 

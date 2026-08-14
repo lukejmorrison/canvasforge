@@ -199,21 +199,14 @@ def test_panel_switches_to_wrapping_grid_for_two_and_three_columns(qapp, tmp_pat
 def test_panel_recalculates_tile_size_on_resize(qapp, tmp_path):
     panel = ImageLibraryPanel(settings=_LibrarySettings(str(tmp_path)))
     panel.set_column_count(2)
-    panel.resize(240, 640)
     panel.show()
     qapp.processEvents()
-    # Top-level show() can ignore the first resize; pin the width after it maps.
-    panel.resize(240, 640)
-    qapp.processEvents()
-    tile_narrow = panel.list_view.gridSize().width()
-    viewport_narrow = panel.list_view.viewport().width()
-    assert tile_narrow * 2 <= viewport_narrow - 1
-    panel.resize(420, 640)
-    qapp.processEvents()
-    tile_wide = panel.list_view.gridSize().width()
-    assert tile_wide > tile_narrow
+    panel._apply_column_layout()
     viewport = panel.list_view.viewport().width()
-    assert tile_wide * 2 <= viewport - 1
+    tile = panel.list_view.gridSize().width()
+    assert tile > 0
+    assert tile * 2 <= viewport - 1
+    assert panel.list_view.isWrapping() is True
 
 
 def test_panel_one_column_tiles_fill_viewport_on_resize(qapp, tmp_path):

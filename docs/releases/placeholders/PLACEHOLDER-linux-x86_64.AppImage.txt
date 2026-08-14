@@ -8,7 +8,7 @@ Install today:
   Other Linux: bash scripts/build_flatpak.sh
     or bash scripts/install_canvasforge.sh --local
 
-Source tarball on this release: canvasforge-0.6.0-beta.10.tar.gz
+Source tarball on this release: canvasforge-0.6.0-beta.12.tar.gz
 
 Roadmap: https://github.com/lukejmorrison/canvasforge/blob/master/ROADMAP.md
 Packaging help: https://github.com/lukejmorrison/canvasforge/discussions

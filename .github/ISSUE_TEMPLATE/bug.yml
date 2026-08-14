@@ -36,7 +36,7 @@ body:
     attributes:
       label: CanvasForge version
       description: AUR package, GitHub tag, or commit. Write unknown if you cannot tell.
-      placeholder: 0.6.0-beta.11
+      placeholder: 0.6.0-beta.12
     validations:
       required: true
   - type: dropdown
