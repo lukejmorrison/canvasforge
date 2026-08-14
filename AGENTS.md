@@ -9,6 +9,9 @@
 - Text boxes should follow Photoshop: Pointer/Move select, drag, and resize; clicking existing text edits it rather than creating another box. Corner handles scale type size; edge handles change box size only.
 - Colour Selector Palette should recolour or restyle selected text: the whole box with Pointer/Move, and the current word or selection with the Text tool.
 - Bold, italic, and underline must combine (BI, BIU, and so on), not act as exclusive single styles.
+- Image library tiles should be full-bleed thumbnails (no grey filler, no filename under the tile). Hover shows a full-image preview plus the full path; right-click offers copy image, copy path, and Send to Agent.
+- Image library view is 1, 2, or 3 columns; one column means a column of tiles that fill the panel width, not a single oversized thumbnail.
+- Send to Agent (`Ctrl+Shift+A`) should discover local agents (Hermes, OpenClaw, Buzz, Grok) and let the user pick at send time; a pin-as-default remains for one-click toolbar sends.
 
 ## Learned Workspace Facts
 
