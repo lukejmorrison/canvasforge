@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Send to Agent picker:** `Ctrl+Shift+A` and **File → Send to Agent...** open a chooser of agents found on this machine (Hermes, OpenClaw identities, Grok TUI/Build, Claude, Codex, custom CLI/HTTP, and `$XDG_RUNTIME_DIR/local-agents/` cards). Offline rows stay visible but cannot be sent to. Pin a default in Preferences or from the picker; the toolbar button then sends to that pin (hold Alt to pick again).
+- **Real local adapters:** Hermes receives an inline-image POST on `:8642`; OpenClaw agents are read from `~/.openclaw/openclaw.json` and sent with `openclaw agent --agent <id>`; Grok TUI clipboard JPEG is unchanged. Spec: `docs/local-agent-handoff.md`.
+- **Image Library hover preview:** Hovering a thumbnail shows a full-image preview (correct aspect ratio) plus the full file path.
+- **Image Library context menu:** Right-click a thumbnail to **Copy image**, **Copy full path**, or **Send to Agent** (same picker as the toolbar).
+
 ## [0.6.0-beta.12] - 2026-08-13
 
 ### Added

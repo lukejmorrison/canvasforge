@@ -28,6 +28,7 @@ modules:
       - install -Dm644 image_library_panel.py /app/share/canvasforge/image_library_panel.py
       - install -Dm644 plugin_manager.py /app/share/canvasforge/plugin_manager.py
       - install -Dm644 undo_manager.py /app/share/canvasforge/undo_manager.py
+      - cp -r agent_handoff /app/share/canvasforge/
       - install -Dm644 requirements.txt /app/share/canvasforge/requirements.txt
       - cp -r assets /app/share/canvasforge/
       - cp -r plugins /app/share/canvasforge/

@@ -5,12 +5,15 @@ from PyQt6.QtWidgets import QListView, QStyleOptionViewItem
 from image_library_panel import (
     COLUMN_COUNT_DEFAULT,
     COLUMNS_SETTINGS_KEY,
+    LIBRARY_CONTEXT_ACTIONS,
+    PREVIEW_MAX_EDGE,
     SCREENSHOT_SETTINGS_KEY,
     THUMBNAIL_SIZE,
     ImageLibraryDelegate,
     ImageLibraryPanel,
     ThumbnailCache,
     clamp_column_count,
+    copy_library_image_to_clipboard,
     copy_library_path_to_clipboard,
     cover_crop_image,
     cover_crop_rect,
@@ -19,6 +22,7 @@ from image_library_panel import (
     item_row_height,
     item_size_for_columns,
     library_path_tooltip,
+    load_full_preview_pixmap,
     tile_size_for_columns,
 )
 
@@ -71,6 +75,31 @@ def test_copy_library_path_to_clipboard(qapp, tmp_path):
     path = str(tmp_path / "example.png")
     assert copy_library_path_to_clipboard(path) is True
     assert QGuiApplication.clipboard().text() == path
+
+
+def test_copy_library_image_to_clipboard(qapp, tmp_path):
+    image_path = tmp_path / "shot.png"
+    source = QImage(80, 40, QImage.Format.Format_RGB32)
+    source.fill(QColor(10, 80, 200))
+    assert source.save(str(image_path))
+    assert copy_library_image_to_clipboard(str(image_path)) is True
+    copied = QGuiApplication.clipboard().image()
+    assert not copied.isNull()
+    assert copied.width() == 80
+    assert copied.height() == 40
+
+
+def test_full_preview_keeps_aspect_ratio_and_is_not_cover_cropped(tmp_path):
+    image_path = tmp_path / "wide.png"
+    source = QImage(400, 200, QImage.Format.Format_RGB32)
+    source.fill(QColor(200, 40, 40))
+    assert source.save(str(image_path))
+    preview = load_full_preview_pixmap(str(image_path), max_edge=200)
+    assert not preview.isNull()
+    assert preview.width() == 200
+    assert preview.height() == 100
+    assert preview.width() <= PREVIEW_MAX_EDGE
+    assert preview.height() <= PREVIEW_MAX_EDGE
 
 
 def test_delegate_size_hint_is_large_thumbnail(qapp):
@@ -146,6 +175,8 @@ class _LibrarySettings:
 def test_panel_offers_copy_path_context_menu(qapp, tmp_path):
     panel = ImageLibraryPanel(settings=_LibrarySettings(str(tmp_path)))
     assert panel.list_view.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+    assert LIBRARY_CONTEXT_ACTIONS == ("Copy image", "Copy full path", "Send to Agent")
+    assert hasattr(panel, "sendToAgentRequested")
 
 
 def test_panel_defaults_to_one_column(qapp, tmp_path):

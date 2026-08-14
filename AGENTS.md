@@ -35,7 +35,7 @@ Agents must not claim a task is complete until the applicable checks below pass 
 
 | Check | Command / action |
 |-------|------------------|
-| Syntax | `python -m py_compile main.py image_library_panel.py undo_manager.py plugin_manager.py` |
+| Syntax | `python -m py_compile main.py image_library_panel.py undo_manager.py plugin_manager.py agent_handoff/*.py agent_handoff/adapters/*.py` |
 | Unit / widget tests | `pip install -r requirements-dev.txt && python -m pytest tests/` (skip only if the change has no test hook) |
 | Daily-driver install | Fully quit CanvasForge, then `bash scripts/install_canvasforge.sh --local` |
 | Daily-driver launch | `~/.local/bin/canvasforge` — **not** `python main.py`, **not** AUR `/usr/bin/canvasforge` |

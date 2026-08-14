@@ -24,6 +24,7 @@ package() {
     CHANGELOG.md \
     README.md \
     TODO.md \
+    agent_handoff \
     artifacts \
     assets \
     featurerequest \

@@ -4,12 +4,7 @@ import subprocess
 import os
 import time
 import math
-import base64
 import json
-import shlex
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
 # Force X11 backend on Wayland+NVIDIA to prevent compositor lockups
@@ -33,12 +28,10 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
              QPushButton, QHBoxLayout, QGroupBox, QFrame, QComboBox, QCheckBox,
              QToolButton, QTableWidget, QTableWidgetItem, QHeaderView, QInputDialog,
              QMessageBox, QGraphicsBlurEffect, QSlider, QScrollArea, QButtonGroup,
-             QFontComboBox, QSpinBox, QColorDialog)
+             QFontComboBox, QSpinBox, QColorDialog, QPlainTextEdit)
 import shutil
 
 __version__ = "0.6.0-beta.12"
-CLIPBOARD_JPEG_MAX_SIDE = 1440
-CLIPBOARD_JPEG_QUALITY = 88
 
 # Supported image extensions for CLI opening (screenshot editor integration, drag/drop, etc.)
 SUPPORTED_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.svg')
@@ -53,30 +46,6 @@ def pasted_logs_dir() -> Path:
     return path
 
 
-def is_allowed_agent_http_endpoint(endpoint: str) -> tuple[bool, str]:
-    """Allow HTTPS anywhere, or cleartext HTTP only to loopback."""
-    parsed = urllib.parse.urlparse(endpoint)
-    if parsed.scheme not in ("http", "https"):
-        return False, "Agent HTTP endpoint must use http:// or https://"
-    host = (parsed.hostname or "").lower()
-    if not host:
-        return False, "Agent HTTP endpoint is missing a hostname"
-    if parsed.scheme == "http" and host not in ("127.0.0.1", "localhost", "::1"):
-        return False, (
-            "Cleartext HTTP agent endpoints are limited to localhost "
-            "(127.0.0.1, localhost, ::1). Use HTTPS for remote hosts."
-        )
-    return True, ""
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Reject HTTP redirects so agent POSTs cannot be steered off-host."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(
-            newurl, code, f"Redirects are not allowed for agent HTTP POST ({code})", headers, fp
-        )
-
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6 import sip
@@ -89,6 +58,16 @@ import datetime
 from image_library_panel import ImageLibraryPanel
 from undo_manager import UndoManager, CallbackAction, ImageEditAction, RegionImageEditAction
 from plugin_manager import PluginManager
+from agent_handoff.adapters.clipboard import (
+    CLIPBOARD_JPEG_MAX_SIDE,
+    CLIPBOARD_JPEG_QUALITY,
+    clipboard_image_mime_data,
+    grok_clipboard_jpeg_image,
+)
+from agent_handoff.discovery import annotate_targets, discover_agents, find_target, resolve_pin_id
+from agent_handoff.dispatch import dispatch_bundle
+from agent_handoff.models import DEFAULT_PROMPT_TEMPLATE, AgentTarget
+from agent_handoff.picker import AgentPickerDialog
 
 
 class ToolType(Enum):
@@ -6262,7 +6241,7 @@ class PreferencesDialog(QDialog):
         return self.editor_path_edit.text() or "code"
 
     def _create_agent_tab(self):
-        """Create the Agent settings tab for selected-image handoff targets."""
+        """Create the Agent settings tab for discovery, pin, and custom send."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(15)
@@ -6271,62 +6250,49 @@ class PreferencesDialog(QDialog):
         cli_form = QFormLayout(cli_group)
 
         self.agent_target_combo = QComboBox()
-        self.agent_target_combo.addItem("Clipboard (path)", "clipboard")
-        self.agent_target_combo.addItem("Clipboard (base64 JPEG)", "clipboard_base64")
-        self.agent_target_combo.addItem("Codex", "codex")
-        self.agent_target_combo.addItem("VS Code Codex", "vscode_codex")
-        self.agent_target_combo.addItem("Claude", "claude")
-        self.agent_target_combo.addItem("OpenClaw", "openclaw")
-        self.agent_target_combo.addItem("Wizwam Agent Platform", "wizwam")
-        saved_target = self.settings.value("agent/target", "claude")
-        idx = self.agent_target_combo.findData(saved_target)
-        self.agent_target_combo.setCurrentIndex(idx if idx >= 0 else 1)
-        cli_form.addRow("Default agent:", self.agent_target_combo)
+        pin_row = QHBoxLayout()
+        pin_row.addWidget(self.agent_target_combo, 1)
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.clicked.connect(self._refresh_agent_pin_combo)
+        pin_row.addWidget(refresh_btn)
+        cli_form.addRow("Pinned default:", pin_row)
 
         self.agent_command_edit = QLineEdit()
         self.agent_command_edit.setPlaceholderText("claude -p \"{prompt}\"")
         self.agent_command_edit.setText(
-            self.settings.value(
-                "agent/command_template",
-                f"{shutil.which('claude') or 'claude'} -p \"{{prompt}}\"",
-            )
+            self.settings.value("agent/command_template", "")
         )
-        cli_form.addRow("Command template:", self.agent_command_edit)
+        cli_form.addRow("Custom command:", self.agent_command_edit)
 
         self.agent_endpoint_edit = QLineEdit()
-        self.agent_endpoint_edit.setPlaceholderText("http://127.0.0.1:18790/...")
+        self.agent_endpoint_edit.setPlaceholderText("http://127.0.0.1:18789/inbox")
         self.agent_endpoint_edit.setText(self.settings.value("agent/http_endpoint", ""))
-        cli_form.addRow("HTTP endpoint:", self.agent_endpoint_edit)
+        cli_form.addRow("Custom HTTP endpoint:", self.agent_endpoint_edit)
 
-        from PyQt6.QtWidgets import QPlainTextEdit
         self.agent_prompt_edit = QPlainTextEdit()
         self.agent_prompt_edit.setPlaceholderText(
             "Please review the annotated screenshot at {image}. "
             "Structured annotations are at {json}. ..."
         )
-        default_prompt = (
-            "Please review the annotated screenshot at {image}. "
-            "Structured annotations are at {json}. "
-            "Tell me what changes the user is asking for and propose code edits."
-        )
         self.agent_prompt_edit.setPlainText(
-            self.settings.value("agent/prompt_template", default_prompt)
+            self.settings.value("agent/prompt_template", DEFAULT_PROMPT_TEMPLATE)
         )
         self.agent_prompt_edit.setFixedHeight(120)
         cli_form.addRow("Prompt template:", self.agent_prompt_edit)
 
         layout.addWidget(cli_group)
+        self._refresh_agent_pin_combo()
 
         info = QLabel(
-            "Send to Agent writes the selected layers as selected.png plus annotations.json. "
-            "If nothing is selected, the whole canvas is bundled. Command placeholders: "
-            "{prompt}, {image}, {json}, {dir}, {agent}. If an HTTP endpoint is set, "
-            "CanvasForge POSTs the same values as JSON instead of launching a command. "
-            "VS Code Codex opens the bundle folder in VS Code and copies the ready prompt. "
-            "Clipboard path saves a PNG to your save folder and copies the image path. "
-            "Clipboard (base64 JPEG) saves a JPEG and puts native image/jpeg data on the "
-            f"clipboard (no local path, no huge base64 text) so Grok TUI pastes the image "
-            f"cleanly (longest side {CLIPBOARD_JPEG_MAX_SIDE}px, quality {CLIPBOARD_JPEG_QUALITY})."
+            "Ctrl+Shift+A opens a picker of agents found on this machine "
+            "(Hermes, OpenClaw, Grok, Claude, Codex, and any local-agent cards). "
+            "The toolbar button sends to the pinned default when one is set; "
+            "hold Alt to open the picker instead. "
+            "Send to Agent writes selected.png plus annotations.json. "
+            "Command placeholders: {prompt}, {image}, {json}, {dir}, {agent}. "
+            "Grok TUI uses a clipboard JPEG "
+            f"(longest side {CLIPBOARD_JPEG_MAX_SIDE}px, quality {CLIPBOARD_JPEG_QUALITY}). "
+            "Apps can publish cards under $XDG_RUNTIME_DIR/local-agents/."
         )
         info.setStyleSheet("color: #888; font-size: 11px;")
         info.setWordWrap(True)
@@ -6334,6 +6300,29 @@ class PreferencesDialog(QDialog):
 
         layout.addStretch()
         return widget
+
+    def _refresh_agent_pin_combo(self):
+        """Reload discovered agents into the pin combo."""
+        if not hasattr(self, "agent_target_combo"):
+            return
+        saved = str(self.settings.value("agent/target", "") or "")
+        if hasattr(self, "agent_command_edit"):
+            command = self.agent_command_edit.text().strip()
+            endpoint = self.agent_endpoint_edit.text().strip()
+        else:
+            command = str(self.settings.value("agent/command_template", "") or "")
+            endpoint = str(self.settings.value("agent/http_endpoint", "") or "")
+        targets = discover_agents(command_template=command, http_endpoint=endpoint)
+        pin_id = resolve_pin_id(saved, targets)
+        self.agent_target_combo.blockSignals(True)
+        self.agent_target_combo.clear()
+        self.agent_target_combo.addItem("None (always ask)", "")
+        for target in targets:
+            label = f"{target.name} ({target.status_label()})"
+            self.agent_target_combo.addItem(label, target.id)
+        idx = self.agent_target_combo.findData(pin_id)
+        self.agent_target_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.agent_target_combo.blockSignals(False)
 
     def get_agent_target(self) -> str:
         return self.agent_target_combo.currentData() or "claude"
@@ -6605,6 +6594,7 @@ class MainWindow(QMainWindow):
         self.library_panel.assetActivated.connect(self._import_library_asset)
         self.library_panel.exportRequested.connect(self._export_canvas_to_library)
         self.library_panel.folderChanged.connect(self._on_library_folder_changed)
+        self.library_panel.sendToAgentRequested.connect(self._send_library_asset_to_agent)
 
         self._splitter.addWidget(self.library_panel)
         self._splitter.addWidget(self.view)
@@ -7365,7 +7355,7 @@ class MainWindow(QMainWindow):
             ("send_backward", "toolbar_icon_send_backward", "Send Backward", lambda: self.adjust_layer_z(1), None, True, False),
             ("---separator1---", None, None, None, None, True, False),
             ("save_selected", "toolbar_icon_save_as", "Save Selected", self.save_selected_items, "Ctrl+Alt+S", True, False),
-            ("send_to_agent", "toolbar_icon_send_to_agent", "Send to Agent", self.send_to_agent, "Ctrl+Shift+A", True, False),
+            ("send_to_agent", "toolbar_icon_send_to_agent", "Send to Agent", self.send_to_agent_toolbar, None, True, False),
             ("---separator_agent---", None, None, None, None, True, False),
             ("flatten_selected", "toolbar_icon_flatten_selected", "Flatten Selected", self.flatten_selected, None, True, False),
             ("flatten_all", "toolbar_icon_flatten_all", "Flatten All", self.flatten_all, None, True, False),
@@ -7684,7 +7674,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(100, self.view.zoom_to_fit)
         else:
             self._status_bar.showMessage(
-                "Screenshot loaded on monitor-sized canvas. Annotate, then use Ctrl+Shift+A → Clipboard (JPEG).",
+                "Screenshot loaded on monitor-sized canvas. Annotate, then use Ctrl+Shift+A to pick an agent.",
                 6000
             )
 
@@ -8325,61 +8315,6 @@ class MainWindow(QMainWindow):
             return None
         return bytes(buffer.data())
 
-    def _grok_clipboard_jpeg_image(self, image: QImage) -> QImage:
-        if max(image.width(), image.height()) > CLIPBOARD_JPEG_MAX_SIDE:
-            image = image.scaled(
-                CLIPBOARD_JPEG_MAX_SIDE,
-                CLIPBOARD_JPEG_MAX_SIDE,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        if image.hasAlphaChannel():
-            flattened = QImage(image.size(), QImage.Format.Format_RGB32)
-            flattened.fill(Qt.GlobalColor.white)
-            painter = QPainter(flattened)
-            painter.drawImage(0, 0, image)
-            painter.end()
-            image = flattened
-        return image.convertToFormat(QImage.Format.Format_RGB888)
-
-    def _clipboard_image_mime_data(self, image: QImage, image_path: Path, as_base64: bool) -> QMimeData | None:
-        import base64
-
-        mime_data = QMimeData()
-        if not as_base64:
-            # Only advertise the local file path for the simple "path" target.
-            # For the base64 JPEG target we intentionally omit this so Grok TUI
-            # (and similar tools) never see a local filesystem path in text/uri-list.
-            mime_data.setUrls([QUrl.fromLocalFile(str(image_path))])
-        if as_base64:
-            jpeg_image = self._grok_clipboard_jpeg_image(image)
-            jpeg_bytes = self._encoded_image_bytes(
-                jpeg_image, "JPEG", CLIPBOARD_JPEG_QUALITY
-            )
-            if jpeg_bytes is None:
-                return None
-            mime_data.setData("image/jpeg", QByteArray(jpeg_bytes))
-            # Note: intentionally NOT calling setImageData() here. This ensures only
-            # image/jpeg is offered on the clipboard (no auto-generated image/png from
-            # Qt). This makes Grok TUI (and similar native clipboard consumers) receive
-            # the properly encoded JPEG when pasting images.
-            #
-            # We deliberately do NOT put the raw base64 data URL in the text clipboard
-            # anymore. Putting a huge base64 string caused Grok TUI to insert the
-            # placeholder "[image content will be provided separately]" instead of
-            # attaching the image properly. The binary JPEG data + short text is much
-            # more reliable for native Wayland clipboard image handling in Grok TUI.
-            image_text = f"[Image from CanvasForge: {image_path.name}]"
-        else:
-            png_bytes = self._encoded_image_bytes(image, "PNG")
-            if png_bytes is None:
-                return None
-            mime_data.setData("image/png", QByteArray(png_bytes))
-            mime_data.setImageData(image)
-            image_text = str(image_path)
-        mime_data.setText(image_text)
-        return mime_data
-
     def _send_to_clipboard_agent(self, as_base64: bool = False) -> Path | None:
         selected_items = self._selected_layer_items()
         image_items = selected_items or self.layer_list.graphics_items()
@@ -8390,192 +8325,128 @@ class MainWindow(QMainWindow):
         if image is None:
             self._status_bar.showMessage("Nothing on canvas to send", 4000)
             return None
-        image_to_save = self._grok_clipboard_jpeg_image(image) if as_base64 else image
-        image_path = self._next_agent_clipboard_image_path(".jpg" if as_base64 else ".png")
-        save_format = "JPEG" if as_base64 else "PNG"
-        save_quality = CLIPBOARD_JPEG_QUALITY if as_base64 else -1
+        return self._copy_image_for_agent(image, as_jpeg=as_base64)
+
+    def _send_to_clipboard_agent_from_file(self, file_path: str, as_base64: bool = False) -> Path | None:
+        image = QImage(file_path)
+        if image.isNull():
+            self._status_bar.showMessage("Could not read library image", 4000)
+            return None
+        return self._copy_image_for_agent(image, as_jpeg=as_base64)
+
+    def _copy_image_for_agent(self, image: QImage, as_jpeg: bool) -> Path | None:
+        image_to_save = grok_clipboard_jpeg_image(image) if as_jpeg else image
+        image_path = self._next_agent_clipboard_image_path(".jpg" if as_jpeg else ".png")
+        save_format = "JPEG" if as_jpeg else "PNG"
+        save_quality = CLIPBOARD_JPEG_QUALITY if as_jpeg else -1
         if not image_to_save.save(str(image_path), save_format, save_quality):
             self._status_bar.showMessage(f"ERROR: Failed to save image to {image_path}", 5000)
             return None
-        mime_data = self._clipboard_image_mime_data(image_to_save, image_path, as_base64)
+        mime_data = clipboard_image_mime_data(image_to_save, image_path, as_jpeg)
         if mime_data is None:
             self._status_bar.showMessage("ERROR: Failed to encode image for clipboard", 5000)
             return None
         QApplication.clipboard().setMimeData(mime_data)
-        self._notify_clipboard_image_path(image_path, "jpeg_base64" if as_base64 else "path")
+        self._notify_clipboard_image_path(image_path, "jpeg_base64" if as_jpeg else "path")
         return image_path
 
-    def send_to_agent(self):
-        """Build a selected-image bundle and send it to the configured agent."""
-        target = str(self.settings.value("agent/target", "claude") or "claude")
-        if target in ("clipboard", "clipboard_base64"):
-            self._send_to_clipboard_agent(as_base64=(target == "clipboard_base64"))
-            return
+    def _build_library_file_bundle(self, file_path: Path) -> Path | None:
+        image = QImage(str(file_path))
+        if image.isNull():
+            self._status_bar.showMessage("Could not read library image", 4000)
+            return None
+        bundle_dir = Path(tempfile.mkdtemp(prefix="canvasforge_agent_"))
+        png_path = bundle_dir / "selected.png"
+        if not image.save(str(png_path), "PNG"):
+            self._status_bar.showMessage("Failed to write library image for Agent", 4000)
+            return None
+        json_path = bundle_dir / "annotations.json"
+        bundle = {
+            "schema": "canvasforge.agent.bundle/1",
+            "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "canvas_image": png_path.name,
+            "selected_only": True,
+            "source_library_path": str(file_path),
+            "scene_size": [image.width(), image.height()],
+            "annotations": [],
+        }
+        json_path.write_text(json.dumps(bundle, indent=2))
+        return bundle_dir
 
-        bundle_dir = self._build_annotation_bundle()
+    def _agent_settings_for_discovery(self) -> tuple[str, str]:
+        command = str(self.settings.value("agent/command_template", "") or "")
+        endpoint = str(self.settings.value("agent/http_endpoint", "") or "")
+        return command, endpoint
+
+    def _discover_agent_targets(self) -> list[AgentTarget]:
+        command, endpoint = self._agent_settings_for_discovery()
+        targets = discover_agents(command_template=command, http_endpoint=endpoint)
+        pin_id = resolve_pin_id(str(self.settings.value("agent/target", "") or ""), targets)
+        last_used = str(self.settings.value("agent/last_used", "") or "")
+        return annotate_targets(targets, pin_id=pin_id, last_used_id=last_used)
+
+    def _send_library_asset_to_agent(self, file_path: str) -> None:
+        """Send a library file through the Send to Agent picker."""
+        self._send_to_agent(force_picker=True, library_path=file_path)
+
+    def send_to_agent(self):
+        """File menu and Ctrl+Shift+A: always open the agent picker."""
+        self._send_to_agent(force_picker=True)
+
+    def send_to_agent_toolbar(self):
+        """Toolbar: send to the pin when set; Alt or no pin opens the picker."""
+        alt = bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier)
+        self._send_to_agent(force_picker=alt)
+
+    def _send_to_agent(self, force_picker: bool = True, library_path: str | None = None) -> None:
+        targets = self._discover_agent_targets()
+        pin_id = resolve_pin_id(str(self.settings.value("agent/target", "") or ""), targets)
+        chosen: AgentTarget | None = None
+        if not force_picker and pin_id:
+            chosen = find_target(targets, pin_id)
+            if chosen is None or not chosen.can_send:
+                chosen = None
+        if chosen is None:
+            dialog = AgentPickerDialog(targets, self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            if dialog.pin_id():
+                self.settings.setValue("agent/target", dialog.pin_id())
+            chosen = dialog.chosen_target()
+        if chosen is None:
+            return
+        self.settings.setValue("agent/last_used", chosen.id)
+        send_type = str((chosen.send or {}).get("type") or chosen.kind)
+        if send_type == "clipboard":
+            as_jpeg = str((chosen.send or {}).get("mode") or "") == "jpeg"
+            if library_path:
+                self._send_to_clipboard_agent_from_file(library_path, as_base64=as_jpeg)
+            else:
+                self._send_to_clipboard_agent(as_base64=as_jpeg)
+            return
+        if library_path:
+            bundle_dir = self._build_library_file_bundle(Path(library_path))
+        else:
+            bundle_dir = self._build_annotation_bundle()
         if bundle_dir is None:
             return
-        png_path = next(bundle_dir.glob("*.png"))
-        json_path = bundle_dir / "annotations.json"
+        self._dispatch_chosen_target(chosen, bundle_dir)
 
-        prompt_template = self.settings.value(
-            "agent/prompt_template",
-            "Please review the annotated screenshot at {image}. "
-            "Structured annotations are at {json}. "
-            "Tell me what changes the user is asking for and propose code edits.",
+    def _dispatch_chosen_target(self, target: AgentTarget, bundle_dir: Path) -> None:
+        prompt_template = str(
+            self.settings.value("agent/prompt_template", DEFAULT_PROMPT_TEMPLATE) or DEFAULT_PROMPT_TEMPLATE
         )
-        prompt = prompt_template.format(
-            image=str(png_path), json=str(json_path), dir=str(bundle_dir), agent=target
-        )
-
-        if target == "vscode_codex":
-            self._send_to_vscode_codex(prompt, png_path, json_path, bundle_dir)
+        result = dispatch_bundle(target, bundle_dir, prompt_template=prompt_template)
+        if result.clipboard_text:
+            QApplication.clipboard().setText(result.clipboard_text)
+        if result.ok:
+            self._status_bar.showMessage(result.message, 8000)
             return
-
-        endpoint = str(self.settings.value("agent/http_endpoint", "") or "").strip()
-        if endpoint:
-            allowed, reason = is_allowed_agent_http_endpoint(endpoint)
-            if not allowed:
-                QMessageBox.warning(self, "Agent HTTP endpoint blocked", reason)
-                return
-            self._post_bundle_to_agent(endpoint, target, prompt, png_path, json_path, bundle_dir)
-            return
-
-        legacy_cli = str(self.settings.value("agent/cli_path", "") or "")
-        default_command = f"{legacy_cli or shutil.which('claude') or 'claude'} -p \"{{prompt}}\""
-        command_template = str(
-            self.settings.value("agent/command_template", default_command) or ""
-        ).strip()
-        if not command_template:
-            QMessageBox.warning(
-                self,
-                "Agent command not configured",
-                "Set an Agent command template or HTTP endpoint in Preferences.",
-            )
-            return
-        command = command_template.format(
-            prompt=prompt,
-            image=str(png_path),
-            json=str(json_path),
-            dir=str(bundle_dir),
-            agent=target,
-        )
-        try:
-            cmd = shlex.split(command)
-        except ValueError as exc:
-            QMessageBox.warning(
-                self,
-                "Agent command error",
-                f"Could not parse the Agent command template:\n\n{exc}\n\nBundle: {bundle_dir}",
-            )
-            return
-
-        confirm = QMessageBox.question(
+        QMessageBox.warning(
             self,
-            "Confirm Agent command",
-            "Run this Agent command?\n\n"
-            f"{' '.join(cmd)}\n\n"
-            f"Bundle: {bundle_dir}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
+            "Send to Agent failed",
+            result.error or "Could not send the bundle to the selected agent.",
         )
-        if confirm != QMessageBox.StandardButton.Yes:
-            return
-
-        try:
-            subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            self._status_bar.showMessage(
-                f"Sent selected image to {target}: {cmd[0]} (bundle: {bundle_dir})", 8000
-            )
-        except FileNotFoundError:
-            QMessageBox.warning(
-                self,
-                "Agent command not found",
-                f"Could not run '{cmd[0]}'. Set the command in Preferences → Agent. "
-                f"The annotation bundle is still "
-                f"available at:\n\n{bundle_dir}",
-            )
-
-    def _send_to_vscode_codex(self, prompt, png_path, json_path, bundle_dir):
-        code_path = shutil.which("code")
-        prompt_path = bundle_dir / "codex_prompt.md"
-        prompt_path.write_text(
-            "# CanvasForge to VS Code Codex\n\n"
-            f"{prompt}\n\n"
-            "## Bundle\n\n"
-            f"- Image: `{png_path}`\n"
-            f"- Annotations: `{json_path}`\n"
-            f"- Folder: `{bundle_dir}`\n\n"
-            "Open the image and annotations in this folder, then use this prompt in the VS Code Codex/OpenAI panel.\n",
-            encoding="utf-8",
-        )
-        QApplication.clipboard().setText(prompt_path.read_text(encoding="utf-8"))
-
-        if not code_path:
-            QMessageBox.warning(
-                self,
-                "VS Code not found",
-                f"Could not find the 'code' command. The Codex prompt was copied "
-                f"to the clipboard and the bundle is available at:\n\n{bundle_dir}",
-            )
-            return
-
-        try:
-            subprocess.Popen(
-                [code_path, "--reuse-window", str(bundle_dir)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            self._status_bar.showMessage(
-                f"Opened VS Code Codex bundle: {bundle_dir} (prompt copied)", 10000
-            )
-        except Exception as exc:
-            QMessageBox.warning(
-                self,
-                "VS Code handoff failed",
-                f"Could not open VS Code:\n\n{exc}\n\n"
-                f"The Codex prompt was copied and the bundle is at:\n\n{bundle_dir}",
-            )
-
-    def _post_bundle_to_agent(self, endpoint, target, prompt, png_path, json_path, bundle_dir):
-        allowed, reason = is_allowed_agent_http_endpoint(endpoint)
-        if not allowed:
-            QMessageBox.warning(self, "Agent HTTP endpoint blocked", reason)
-            return
-        payload = {
-            "source": "CanvasForge",
-            "target": target,
-            "prompt": prompt,
-            "bundle_dir": str(bundle_dir),
-            "image_path": str(png_path),
-            "annotations_path": str(json_path),
-            "image_base64": base64.b64encode(png_path.read_bytes()).decode("ascii"),
-            "annotations": json.loads(json_path.read_text()),
-        }
-        request = urllib.request.Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        opener = urllib.request.build_opener(_NoRedirect)
-        try:
-            opener.open(request, timeout=15).read()
-            self._status_bar.showMessage(
-                f"Posted selected image to {target} via {endpoint}", 8000
-            )
-        except Exception as exc:
-            QMessageBox.warning(
-                self,
-                "Agent HTTP send failed",
-                f"Could not POST to {endpoint}:\n\n{exc}\n\nBundle: {bundle_dir}",
-            )
 
     def _restore_window_geometry(self):
         """Restore window position and size based on startup preference."""

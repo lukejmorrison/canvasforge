@@ -33,6 +33,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QComboBox,
@@ -74,6 +75,12 @@ MAX_CACHE_SIZE = 500  # Max number of cached thumbnails
 COLUMN_COUNT_MIN = 1
 COLUMN_COUNT_MAX = 3
 COLUMN_COUNT_DEFAULT = 1
+PREVIEW_MAX_EDGE = 420
+LIBRARY_CONTEXT_ACTIONS: Tuple[str, ...] = (
+    "Copy image",
+    "Copy full path",
+    "Send to Agent",
+)
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -185,6 +192,94 @@ def copy_library_path_to_clipboard(path: str) -> bool:
         return False
     clipboard.setText(path)
     return True
+
+
+def copy_library_image_to_clipboard(path: str) -> bool:
+    """Copy the full library image to the clipboard."""
+    image = QImage(path)
+    if image.isNull():
+        return False
+    clipboard = QGuiApplication.clipboard()
+    if clipboard is None:
+        return False
+    clipboard.setImage(image)
+    return True
+
+
+def load_full_preview_pixmap(file_path: str, max_edge: int = PREVIEW_MAX_EDGE) -> QPixmap:
+    """Full-image hover preview (keep aspect ratio), not the cover-cropped tile."""
+    target = max(1, int(max_edge))
+    reader = QImageReader(file_path)
+    image = QImage()
+    if reader.canRead():
+        reader.setAutoTransform(True)
+        native = reader.size()
+        if native.isValid() and native.width() > 0 and native.height() > 0:
+            scaled = native.scaled(target, target, Qt.AspectRatioMode.KeepAspectRatio)
+            if scaled.width() < native.width() or scaled.height() < native.height():
+                reader.setScaledSize(scaled)
+        image = reader.read()
+    if image.isNull():
+        image = QImage(file_path)
+    if image.isNull():
+        return QPixmap()
+    if image.width() > target or image.height() > target:
+        image = image.scaled(
+            target,
+            target,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+    return QPixmap.fromImage(image)
+
+
+class LibraryHoverPreview(QFrame):
+    """Tooltip-style popup: full image preview plus the absolute path."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setObjectName("libraryHoverPreview")
+        self.setStyleSheet(
+            "#libraryHoverPreview { background: #2a2a2a; border: 1px solid #555; }"
+        )
+        self._path = ""
+        self._image_label = QLabel()
+        self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._path_label = QLabel()
+        self._path_label.setWordWrap(True)
+        self._path_label.setStyleSheet("color: #ddd; padding: 4px 6px;")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+        layout.addWidget(self._image_label)
+        layout.addWidget(self._path_label)
+
+    def show_for(self, file_path: str, global_pos) -> None:
+        path = library_path_tooltip(file_path)
+        if path != self._path:
+            pixmap = load_full_preview_pixmap(file_path)
+            if pixmap.isNull():
+                self.hide()
+                return
+            self._image_label.setPixmap(pixmap)
+            self._path_label.setText(path)
+            self._path = path
+            self.adjustSize()
+        screen = QGuiApplication.screenAt(global_pos) or QGuiApplication.primaryScreen()
+        geo = screen.availableGeometry() if screen is not None else None
+        x = global_pos.x() + 16
+        y = global_pos.y() + 16
+        if geo is not None:
+            if x + self.width() > geo.right():
+                x = global_pos.x() - self.width() - 16
+            if y + self.height() > geo.bottom():
+                y = max(geo.top(), geo.bottom() - self.height())
+        self.move(x, y)
+        self.show()
+
+    def hide_preview(self) -> None:
+        self._path = ""
+        self.hide()
 
 
 class _ThumbnailSignals(QObject):
@@ -399,11 +494,8 @@ class LibrarySortFilterProxy(QSortFilterProxyModel):
         self.sort(0, self._sort_order)
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):  # type: ignore[override]
-        if role == Qt.ItemDataRole.ToolTipRole and index.isValid():
-            model = self.sourceModel()
-            source = self.mapToSource(index)
-            if isinstance(model, QFileSystemModel) and source.isValid():
-                return library_path_tooltip(model.fileInfo(source).absoluteFilePath())
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return ""
         return super().data(index, role)
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:  # type: ignore[override]
@@ -508,6 +600,7 @@ class ImageLibraryPanel(QWidget):
     assetActivated = pyqtSignal(str)
     exportRequested = pyqtSignal()
     folderChanged = pyqtSignal(str)
+    sendToAgentRequested = pyqtSignal(str)
 
     def __init__(self, settings: Optional[object] = None, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -538,6 +631,7 @@ class ImageLibraryPanel(QWidget):
         self._layout_settle_timer.setSingleShot(True)
         self._layout_settle_timer.setInterval(0)
         self._layout_settle_timer.timeout.connect(self._apply_column_layout)
+        self._hover_preview = LibraryHoverPreview(self)
 
         self._build_ui()
         self._install_shortcuts()
@@ -692,12 +786,18 @@ class ImageLibraryPanel(QWidget):
         file_path = self._path_for_index(self.list_view.indexAt(pos))
         if not file_path:
             return
+        self._hide_hover_preview()
         menu = QMenu(self)
-        copy_action = menu.addAction("Copy path")
-        copy_action.setToolTip(library_path_tooltip(file_path))
+        copy_image = menu.addAction("Copy image")
+        copy_path = menu.addAction("Copy full path")
+        send_agent = menu.addAction("Send to Agent")
         chosen = menu.exec(self.list_view.viewport().mapToGlobal(pos))
-        if chosen == copy_action:
+        if chosen == copy_image:
+            copy_library_image_to_clipboard(file_path)
+        elif chosen == copy_path:
             copy_library_path_to_clipboard(file_path)
+        elif chosen == send_agent:
+            self.sendToAgentRequested.emit(file_path)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -708,13 +808,31 @@ class ImageLibraryPanel(QWidget):
         self._apply_column_layout()
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # type: ignore[override]
-        if (
-            hasattr(self, "list_view")
-            and obj is self.list_view.viewport()
-            and event.type() == QEvent.Type.Resize
-        ):
-            self._apply_column_layout()
+        if hasattr(self, "list_view") and obj is self.list_view.viewport():
+            etype = event.type()
+            if etype == QEvent.Type.Resize:
+                self._apply_column_layout()
+            elif etype in (QEvent.Type.MouseMove, QEvent.Type.HoverMove):
+                pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+                self._update_hover_preview(pos)
+            elif etype in (QEvent.Type.Leave, QEvent.Type.HoverLeave, QEvent.Type.Wheel):
+                self._hide_hover_preview()
         return super().eventFilter(obj, event)
+
+    def hideEvent(self, event) -> None:  # type: ignore[override]
+        self._hide_hover_preview()
+        super().hideEvent(event)
+
+    def _update_hover_preview(self, pos) -> None:
+        file_path = self._path_for_index(self.list_view.indexAt(pos))
+        if not file_path:
+            self._hide_hover_preview()
+            return
+        self._hover_preview.show_for(file_path, self.list_view.viewport().mapToGlobal(pos))
+
+    def _hide_hover_preview(self) -> None:
+        if hasattr(self, "_hover_preview"):
+            self._hover_preview.hide_preview()
 
     def _handle_sort_change(self, idx: int) -> None:
         data = self.sort_combo.itemData(idx)

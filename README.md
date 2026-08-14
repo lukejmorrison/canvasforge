@@ -64,7 +64,7 @@ Arrows, numbered steps, callouts, text boxes, highlight, blur, eyedropper, and t
 
 ### 3. Send to Agent
 
-One click flattens a clean JPEG for Grok, Claude, Codex, or OpenClaw — clipboard, folder, or command. No website in the middle.
+`Ctrl+Shift+A` opens a picker of agents running on your machine — Hermes, OpenClaw, Grok, Claude, Codex — and hands them the annotated image. No website in the middle.
 
 <p align="center">
   <img src="docs/images/howto-send-to-agent.png" alt="Send to Agent hands the annotated image to a local Grok TUI" width="100%">
@@ -75,7 +75,7 @@ One click flattens a clean JPEG for Grok, Claude, Codex, or OpenClaw — clipboa
 - **Print Screen → CanvasForge** — Set `OMARCHY_SCREENSHOT_EDITOR=canvasforge` and every screenshot opens with the correct monitor resolution.
 - **Super + S Scratchpad** — Enable "Launch in Omarchy Scratchpad" in Preferences. CanvasForge appears on whatever monitor your mouse is on.
 - **Monitor-accurate canvas** — Uses physical monitor resolution (including fractional scaling like `scale 1.2`).
-- **Grok TUI** — **Send to Agent → Clipboard (base64 JPEG)** pastes a clean, sized image into Grok.
+- **Grok TUI** — **Send to Agent** and choose **Grok TUI (clipboard JPEG)** to paste a clean, sized image into Grok.
 - **HiDPI** — Proper support for high-DPI and scaled Omarchy displays.
 
 See the [full Omarchy setup guide](#omarchy-setup) below.
@@ -111,7 +111,7 @@ Do **not** use `yay -Syu canvasforge-beta` unless you intend a full system upgra
 - **Smart Selection & Cutouts** — Draw regions on images, move them around, or extract them cleanly.
 - **Colour Picker + Fill** — Pick colours from the canvas or Omarchy `hyprpicker`, then bucket-fill connected raster-image regions with undo and transparent fill support.
 - **Layer & Repository System** — Full layer management + a persistent image library that watches your Screenshots folder.
-- **One-Click Agent Handoff** — Send to Claude, Codex, OpenClaw, Wizwam, or directly to Grok TUI via clean clipboard JPEG.
+- **One-Click Agent Handoff** — Pick Hermes, OpenClaw, Grok, Claude, or Codex from a live local list, or pin a default for the toolbar.
 - **Flawless Export** — Flatten selected or all layers with hidden handles for pixel-perfect output.
 - **Beautiful Theming** — Multiple icon themes, dark mode, and fully customizable toolbar.
 - **HiDPI & Fractional Scaling** — Excellent support for modern displays with non-integer scaling (common in Omarchy).
@@ -221,7 +221,7 @@ On Omarchy/Arch, `scripts/install_canvasforge.sh` installs only `canvasforge-bet
 - Drag resize handles with standard modifiers: no key keeps proportions, Shift/Ctrl allows independent width/height, Alt resizes from center, Ctrl+Shift skews where supported, and Ctrl+Alt+Shift applies perspective-style transforms where supported.
 - Use *Flatten Selected* or *Flatten All* from the toolbar/menu to rasterize layers. The operations create a new raster artifact without destroying originals until you remove them.
 - Saving (`Ctrl/Cmd+S`) renders the scene without showing selection handles and writes a PNG to your default Pictures/CanvasForge directory. Change this directory via **Edit → Settings → Save Directory**; CanvasForge persists the choice using `QSettings`.
-- Use *Save Selected* (`Ctrl+Alt+S`) to write just the selected layers. Use *Send to Agent* (`Ctrl+Shift+A`) to create a temp bundle with `selected.png` and `annotations.json`; configure the command, VS Code Codex folder handoff, HTTP endpoint, Clipboard image-path handoff, or Clipboard base64 JPEG handoff under **Edit → Preferences → Agent**. The base64 JPEG handoff targets Grok-friendly defaults: longest side 1440px, quality 88.
+- Use *Save Selected* (`Ctrl+Alt+S`) to write just the selected layers. Use *Send to Agent* (`Ctrl+Shift+A`) to pick a local agent and hand it `selected.png` plus `annotations.json`. Pin a default under **Edit → Preferences → Agent**. Grok TUI uses a clipboard JPEG (longest side 1440px, quality 88). Other apps can publish cards under `$XDG_RUNTIME_DIR/local-agents/` — see [docs/local-agent-handoff.md](docs/local-agent-handoff.md).
 
 ## Omarchy Setup (Recommended)
 
