@@ -1,6 +1,6 @@
 {
-  "name": "CanvasForge Mobile",
-  "short_name": "CanvasForge",
+  "name": "canvasForge",
+  "short_name": "canvasForge",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#12141a",
