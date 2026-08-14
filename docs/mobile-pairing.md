@@ -1,56 +1,72 @@
 # Mobile pairing and shared grabs
 
-CanvasForge keeps screen grabs in one Image Library folder. A phone on the same LAN (or Tailscale) can pair like Buzz and drop captures into that folder. There is no CanvasForge account and no public website in the middle.
+The phone app is a **Flutter** project under [`mobile/app`](../mobile/app). iOS and Android share one Dart codebase. The PyQt6 desktop editor stays the desktop editor.
 
-Related issues: [#29](https://github.com/lukejmorrison/canvasforge/issues/29) companion, [#30](https://github.com/lukejmorrison/canvasforge/issues/30) QR pair, [#31](https://github.com/lukejmorrison/canvasforge/issues/31) LAN sync.
+Pairing matches Buzz: scan the QR from **Settings → Mobile → Pair Mobile Device**, confirm the short security code on both sides, then send screen grabs into the desktop Image Library over LAN or Tailscale. No CanvasForge account.
+
+Related issues: [#29](https://github.com/lukejmorrison/canvasforge/issues/29) Flutter companion, [#30](https://github.com/lukejmorrison/canvasforge/issues/30) QR pair, [#31](https://github.com/lukejmorrison/canvasforge/issues/31) LAN sync.
 
 ## What you get
 
 - Desktop still captures and annotates locally (arrows, text, highlight, blur).
 - **Export Canvas** in the Image Library writes the annotated grab into the shared folder.
-- A phone opens the local companion served by the desktop, pairs, and uploads a screenshot to the same folder.
+- The Flutter app pairs, then uploads a screenshot to that same folder.
 - The library watcher shows the new file. Open it and use **Send to Agent** as usual.
 
-## Omarchy desktop
+A static page under `mobile/` is still served by the desktop as a fallback if the Flutter app is not installed. The Flutter app is the product.
 
-1. Install or refresh the daily-driver tree:
+## Omarchy / Linux desktop
 
-   ```bash
-   bash scripts/install_canvasforge.sh --local
-   ~/.local/bin/canvasforge
-   ```
+1. Quit any running CanvasForge window.
+2. `bash scripts/install_canvasforge.sh --local`
+3. Launch `~/.local/bin/canvasforge` (not `python main.py`, not AUR `/usr/bin/canvasforge`).
+4. Set the Image Library folder if needed (`~/Pictures/Screenshots`).
+5. **Edit → Preferences → Mobile → Pair Mobile Device**.
 
-   Quit any already-running CanvasForge window first. Do not test with `python main.py` if you want the installed launcher.
+The desktop listens on port `17831` on all interfaces. After a device is paired, the listener starts with the app.
 
-2. Set the Image Library folder (**Edit → Preferences → Folders**, or the sidebar combo) to the folder both devices should share. Default is usually `~/Pictures/Screenshots`.
+## macOS desktop
 
-3. Open **Edit → Preferences → Mobile** (Settings → Mobile).
+On a Mac (Intel Mini or otherwise):
 
-4. Click **Pair Mobile Device**. The desktop shows a QR code and a short security code.
+```bash
+bash scripts/build_macos_app.sh
+open dist/CanvasForge.app
+```
 
-5. Leave Preferences open until both sides have confirmed.
+Then **CanvasForge → Settings → Mobile → Pair Mobile Device**. The same LAN listener and Image Library path apply.
 
-The desktop listens on port `17831` on all interfaces so a phone on LAN or Tailscale can reach it. After a device is paired, the listener starts with the app so you do not pair again.
+## Flutter phone app (iOS and Android)
 
-## Phone (iOS or Android)
+```bash
+cd mobile/app
+flutter pub get
+flutter test
+flutter run                 # choose the iPhone, simulator, or Android device
+flutter run -d ios
+flutter run -d android
+```
 
-The companion is the page the desktop serves at `http://DESKTOP_IP:17831/`. Scan the QR code, or paste the `host:port#token` code.
+Or `bash scripts/build_flutter_mobile.sh` (runs tests; pass `ios`, `ios-simulator`, or `apk` to build).
 
-1. Confirm the security code matches the desktop, then tap **Confirm pairing**.
-2. Confirm on the desktop too.
+1. Tap **Scan desktop QR code**, or paste the `host:port#token` code.
+2. Confirm the security code matches the desktop, then confirm on the desktop too.
 3. Choose a screenshot or take a photo. It appears in the Image Library.
-4. Optional: Add the page to the Home Screen. It still talks only to your desktop.
 
-iOS cannot share the system screen-recording buffer into a browser the way Android Chrome sometimes can. Take a screenshot, then pick it from Photos.
+### iOS signing
+
+`flutter build ios --simulator --no-codesign` and `flutter build ios --no-codesign` work on a Mac with Xcode and do not need an App Store certificate.
+
+A device-installable signed IPA / TestFlight build needs a Team in Xcode (**Signing & Capabilities** on `ios/Runner.xcworkspace`). Cloud agents cannot do that. Bundle id: `com.lukejmorrison.canvasforgeMobile`.
+
+### Android
+
+`flutter build apk` produces a sideloadable APK. Play Store is later.
 
 ## Send to Agent
 
-Unchanged. Open the shared grab from the Image Library, annotate if you want, then **Send to Agent** (`Ctrl+Shift+A`). Clipboard / folder / command targets stay under **Preferences → Agent**.
+Unchanged. Open the shared grab from the Image Library, annotate if you want, then **Send to Agent** (`Ctrl+Shift+A`).
 
 ## Unpair
 
-**Preferences → Mobile** lists paired phones. Remove one there. On the phone, tap **Forget this desktop**.
-
-## Later native apps
-
-`/api/pair/offer`, `/api/pair/confirm`, `/api/pair/status`, and `/api/upload` are the protocol a Flutter APK can call. See [`mobile/README.md`](../mobile/README.md).
+**Preferences → Mobile** lists paired phones. In the Flutter app, tap **Forget this desktop**.

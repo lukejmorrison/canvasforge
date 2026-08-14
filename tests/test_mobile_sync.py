@@ -51,6 +51,16 @@ def test_security_code_is_stable_and_readable():
     assert code != security_code_from_token("b" * 32)
 
 
+def test_pairing_formats_match_flutter_client_examples():
+    """Keep the Dart PairingLink.parse cases in lock-step with the desktop."""
+    qr = "http://192.168.1.20:17831/?pair=deadbeefcafebabe0123456789abcdef"
+    pasted = "192.168.1.20:17831#deadbeefcafebabe0123456789abcdef"
+    from_qr = parse_pairing_link(qr)
+    from_paste = parse_pairing_link(pasted)
+    assert from_qr["token"] == from_paste["token"] == "deadbeefcafebabe0123456789abcdef"
+    assert from_qr["url"] == from_paste["url"] == "http://192.168.1.20:17831"
+
+
 def test_pairing_payload_and_pasteable_code():
     payload = build_pairing_payload("deadbeef" * 4, 17831, addresses=["192.168.1.20"])
     assert payload["scheme"] == "canvasforge-pair"

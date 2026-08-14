@@ -222,7 +222,7 @@ On Omarchy/Arch, `scripts/install_canvasforge.sh` installs only `canvasforge-bet
 - Use *Flatten Selected* or *Flatten All* from the toolbar/menu to rasterize layers. The operations create a new raster artifact without destroying originals until you remove them.
 - Saving (`Ctrl/Cmd+S`) renders the scene without showing selection handles and writes a PNG to your default Pictures/CanvasForge directory. Change this directory via **Edit → Settings → Save Directory**; CanvasForge persists the choice using `QSettings`.
 - Use *Save Selected* (`Ctrl+Alt+S`) to write just the selected layers. Use *Send to Agent* (`Ctrl+Shift+A`) to create a temp bundle with `selected.png` and `annotations.json`; configure the command, VS Code Codex folder handoff, HTTP endpoint, Clipboard image-path handoff, or Clipboard base64 JPEG handoff under **Edit → Preferences → Agent**. The base64 JPEG handoff targets Grok-friendly defaults: longest side 1440px, quality 88.
-- Pair a phone from **Edit → Preferences → Mobile → Pair Mobile Device**. Scan the QR code (or paste the pairing code), confirm the matching security code on both devices, then send a screenshot. It lands in the Image Library folder. Details: [docs/mobile-pairing.md](docs/mobile-pairing.md).
+- Pair the Flutter phone app from **Edit → Preferences → Mobile → Pair Mobile Device**. Scan the QR code (or paste the pairing code), confirm the matching security code on both devices, then send a screenshot. It lands in the Image Library folder. Details: [docs/mobile-pairing.md](docs/mobile-pairing.md).
 
 ## Omarchy Setup (Recommended)
 
@@ -298,22 +298,22 @@ This makes `Super + S` (scratchpad toggle) bring up CanvasForge on the monitor y
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) – Discussions, Issues, and pull requests.
 - [`docs/github-workflow.md`](docs/github-workflow.md) – Issue → implement → test → ship.
 - [`docs/pwa-platform-plan.md`](docs/pwa-platform-plan.md) – Native packages and mobile companion (not a hosted PWA).
-- [`docs/mobile-pairing.md`](docs/mobile-pairing.md) – Settings → Mobile QR pairing and shared Image Library sync.
-- `mobile/` – Phone capture companion served by the desktop on the LAN.
+- [`docs/mobile-pairing.md`](docs/mobile-pairing.md) – Settings → Mobile QR pairing and the Flutter phone app.
+- `mobile/app/` – Flutter iOS/Android capture companion (the phone app).
 - [`docs/targets.md`](docs/targets.md) – What to build locally vs on CI.
 - [`docs/images/`](docs/images/) – README product shots (Grok Imagine).
 - [`docs/releases/placeholders/`](docs/releases/placeholders/) – Per-OS GitHub Release placeholder assets.
 
 ## Roadmap
 
-CanvasForge stays a native app: one repo, one version, native packages per OS. The desktop editor remains PyQt6. A phone app, when it exists, is a companion that sends captures to the desktop — not a rewrite and not a hosted site.
+CanvasForge stays a native app: one repo, one version, native packages per OS. The desktop editor remains PyQt6. The phone app is a Flutter companion that sends captures to the desktop — not a rewrite and not a hosted site.
 
 | Phase | Focus | Status |
 |-------|--------|--------|
 | Now | AUR, Flatpak, macOS Intel `.app` | Ships today |
 | 1 | Windows installer, macOS Apple Silicon, AppImage, multi-asset Releases | Help wanted |
-| 2 | Android companion + QR pairing on LAN / Tailscale | Later |
-| 3 | iOS, optional stores (winget, Homebrew, Flathub) | Last |
+| 2 | Flutter iOS/Android companion + QR pairing on LAN / Tailscale | In progress |
+| 3 | Optional stores (winget, Homebrew, Flathub), TestFlight | Last |
 
 Full sequence, non-goals, and how to help: **[ROADMAP.md](ROADMAP.md)**.
 
