@@ -1,6 +1,6 @@
-# CanvasForge mobile app
+# canvasForge (phone)
 
-This Flutter project **is** the CanvasForge phone app. The same Dart code ships on iOS and Android. It is a capture companion, not a rewrite of the PyQt6 desktop editor.
+This Flutter project **is** the canvasForge phone app — same name as the desktop app. The same Dart code ships on iOS and Android. It is a capture companion, not a rewrite of the PyQt6 desktop editor.
 
 Pairing matches Buzz: scan the QR code from desktop **Settings → Mobile → Pair Mobile Device**, confirm the short security code on both sides, then send screen grabs into the desktop Image Library over LAN or Tailscale. No CanvasForge account.
 

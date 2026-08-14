@@ -46,7 +46,7 @@ class CanvasForgeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CanvasForge',
+      title: 'canvasForge',
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: _bg,
@@ -401,7 +401,7 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('CanvasForge', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+              Text('canvasForge', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
               Text('Capture companion — sends grabs to your desktop library'),
             ],
           ),

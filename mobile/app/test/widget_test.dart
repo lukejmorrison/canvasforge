@@ -21,6 +21,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('canvasForge'), findsOneWidget);
     expect(find.text('Pair with desktop'), findsOneWidget);
     expect(find.text('Scan desktop QR code'), findsOneWidget);
     expect(find.text('Use pairing code'), findsOneWidget);
