@@ -1,6 +1,6 @@
 # Mobile pairing and shared grabs
 
-The phone app is a **Flutter** project under [`mobile/app`](../mobile/app). iOS and Android share one Dart codebase. The PyQt6 desktop editor stays the desktop editor.
+The phone app is **canvasForge**, the same name as the desktop app. It is a **Flutter** project under [`mobile/app`](../mobile/app). iOS and Android share one Dart codebase. The PyQt6 desktop editor stays the desktop editor.
 
 Pairing matches Buzz: scan the QR from **Settings → Mobile → Pair Mobile Device**, confirm the short security code on both sides, then send screen grabs into the desktop Image Library over LAN or Tailscale. No CanvasForge account.
 

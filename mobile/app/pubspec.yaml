@@ -1,5 +1,5 @@
 name: canvasforge_mobile
-description: CanvasForge phone companion. Pair with the desktop and send grabs to the Image Library.
+description: canvasForge phone companion. Pair with the desktop and send grabs to the Image Library.
 publish_to: "none"
 version: 1.0.0+1
 
