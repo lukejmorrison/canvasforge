@@ -25,7 +25,7 @@ See [ROADMAP.md](../ROADMAP.md) for phase order.
 
 ## Needs Mac?
 
-Yes for signed macOS and iOS ship paths — via CI or a rare interactive Mac, not the daily desktop. The Intel `.app` script ([`scripts/build_macos_app.sh`](../scripts/build_macos_app.sh)) already has to run on macOS.
+Yes for signed macOS and iOS ship paths — via CI or a rare interactive Mac, not the daily desktop. The Intel x86_64 DMG already ships on [GitHub Releases](https://github.com/lukejmorrison/canvasforge/releases) (`CanvasForge-*-macos-x64.dmg`). Rebuilding it with [`scripts/build_macos_app.sh`](../scripts/build_macos_app.sh) still has to run on macOS.
 
 ## Needs Windows?
 

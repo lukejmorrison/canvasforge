@@ -17,7 +17,7 @@ Knock-off order vs canvas work:
 |-------|--------|------------|----------------|
 | 1 | [#28](https://github.com/lukejmorrison/canvasforge/issues/28) OS defaults | — | Linux defaults must not regress; other OS via CI |
 | 2 | [#24](https://github.com/lukejmorrison/canvasforge/issues/24) Windows `.exe` | Discussion `Packaging: …` | Windows canary |
-| 3 | [#25](https://github.com/lukejmorrison/canvasforge/issues/25) macOS arm64 DMG | Intel script already exists | macOS CI |
+| 3 | [#25](https://github.com/lukejmorrison/canvasforge/issues/25) macOS arm64 DMG | Intel DMG already ships on Releases | macOS CI |
 | 4 | [#26](https://github.com/lukejmorrison/canvasforge/issues/26) Linux AppImage | — | Ubuntu smoke; AUR unchanged |
 | 5 | [#27](https://github.com/lukejmorrison/canvasforge/issues/27) Multi-asset Releases + CI | Real artifacts from 2–4 | Same GitHub tag; AUR still uses the source tarball |
 

@@ -31,7 +31,7 @@ That checkout run is for development. After you change the checkout, fully quit 
 
 Automated tests: `pip install -r requirements-dev.txt && python -m pytest tests/`.
 
-See [README.md](README.md) for Flatpak, macOS Intel builds, and Omarchy screenshot-editor setup.
+See [README.md](README.md) for the AUR package, the macOS Intel DMG, Flatpak, and Omarchy screenshot-editor setup.
 
 ## Pull requests
 
@@ -52,4 +52,4 @@ Read [AGENT.md](AGENT.md) before a substantial code PR. In short:
 - Keep imports at the top of the file.
 - Prefer a small, fast change over a new abstraction.
 
-Platform work (Windows installer, macOS DMG, AppImage, later `mobile/`) is sequenced in [ROADMAP.md](ROADMAP.md). What you can build locally versus what belongs in CI is in [docs/targets.md](docs/targets.md).
+Platform work (Windows installer, macOS Apple Silicon DMG, AppImage, later `mobile/`) is sequenced in [ROADMAP.md](ROADMAP.md). The Intel x86_64 DMG already ships on GitHub Releases. What you can build locally versus what belongs in CI is in [docs/targets.md](docs/targets.md).

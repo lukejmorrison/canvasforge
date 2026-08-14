@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **macOS Intel install:** Docs now point Intel Macs at the real `CanvasForge-0.6.0-beta.12-macos-x64.dmg` on [v0.6.0-beta.12](https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.12). Requirements: Intel Mac, macOS 11+ (verified on Monterey 12.7.6). Download the DMG, open it, and drag CanvasForge to Applications. First launch may need right-click → Open (ad-hoc signed, no Developer ID). Capture may prompt for Screen Recording and Accessibility. Apple Silicon is still not a real build. This Intel DMG includes the Monterey Saved Application State / late `NSApplicationDelegate` launch fix.
+
 ## [0.6.0-beta.12] - 2026-08-13
 
 ### Added

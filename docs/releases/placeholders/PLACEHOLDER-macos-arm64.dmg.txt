@@ -3,8 +3,8 @@ CanvasForge macOS Apple Silicon DMG — not in this release yet.
 Status: Phase 1 (help wanted)
 Planned asset: CanvasForge-<version>-macos-arm64.dmg
 
-An Intel .app / DMG can be built on a Mac with:
-  bash scripts/build_macos_app.sh
+Intel Macs: download CanvasForge-<version>-macos-x64.dmg from this release.
+There is no Apple Silicon (arm64) DMG yet.
 
 Roadmap: https://github.com/lukejmorrison/canvasforge/blob/master/ROADMAP.md
 Packaging help: https://github.com/lukejmorrison/canvasforge/discussions

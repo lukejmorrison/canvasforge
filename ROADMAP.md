@@ -14,8 +14,8 @@ These already ship:
 |------|----------------|
 | Omarchy / Arch | AUR [`canvasforge-beta`](https://aur.archlinux.org/packages/canvasforge-beta). Recipe in [`packaging/aur/canvasforge-beta/`](packaging/aur/canvasforge-beta/). |
 | Other Linux | Flatpak via [`scripts/build_flatpak.sh`](scripts/build_flatpak.sh), or a local venv via [`scripts/install_canvasforge.sh`](scripts/install_canvasforge.sh). |
-| macOS Intel | Ad-hoc-signed `.app` / DMG via [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) (older Mac Minis, macOS 11+). |
-| GitHub Releases | Source tarball from [`scripts/create_beta_release.sh`](scripts/create_beta_release.sh). AUR consumes that tarball. |
+| macOS Intel | Ad-hoc-signed Intel x86_64 DMG on [GitHub Releases](https://github.com/lukejmorrison/canvasforge/releases) (`CanvasForge-0.6.0-beta.12-macos-x64.dmg`). Intel Mac, macOS 11+ (verified on Monterey 12.7.6). |
+| GitHub Releases | Source tarball from [`scripts/create_beta_release.sh`](scripts/create_beta_release.sh) (AUR consumes that tarball) plus the Intel macOS DMG (`CanvasForge-0.6.0-beta.12-macos-x64.dmg`). |
 
 Arch remains the first-class daily driver. Omarchy hooks (Print Screen, scratchpad, `hyprpicker`) stay Linux-only.
 
@@ -26,7 +26,7 @@ Goal: a friend on Windows or a Mac downloads an installer from the same GitHub R
 | Item | Status | Notes |
 |------|--------|--------|
 | Windows PyInstaller + `.exe` installer | Help wanted | Bundle Python and Qt so users never install a toolchain. |
-| macOS Apple Silicon (or universal) DMG | Help wanted | Intel path exists; arm64 / notarization come next. |
+| macOS Apple Silicon (or universal) DMG | Help wanted | Intel DMG ships on Releases; arm64 / notarization come next. |
 | Linux AppImage | Help wanted | One file to download and run on non-Arch distros. |
 | Multi-asset GitHub Releases | Planned | One tag uploads Windows, macOS, Linux, and source. |
 | CI canaries | Planned | GitHub Actions for Windows and macOS. Local loop stays Arch. See [docs/targets.md](docs/targets.md). |

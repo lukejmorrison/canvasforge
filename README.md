@@ -31,6 +31,8 @@
   ·
   <a href="https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.12">Latest tarball</a>
   ·
+  <a href="https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/CanvasForge-0.6.0-beta.12-macos-x64.dmg">macOS Intel DMG</a>
+  ·
   <a href="CONTRIBUTING.md">Contributing</a>
   ·
   <a href="https://github.com/lukejmorrison/canvasforge/discussions">Discussions</a>
@@ -91,7 +93,7 @@ Click **Releases** in the GitHub sidebar for the same list. Ready assets downloa
 | **Linux AppImage** | Placeholder | [PLACEHOLDER-linux-x86_64.AppImage.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/PLACEHOLDER-linux-x86_64.AppImage.txt) |
 | **Windows x64** | Placeholder | [PLACEHOLDER-windows-x64-setup.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/PLACEHOLDER-windows-x64-setup.txt) |
 | **macOS Apple Silicon** | Placeholder | [PLACEHOLDER-macos-arm64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/PLACEHOLDER-macos-arm64.dmg.txt) |
-| **macOS Intel** | Build on a Mac | [PLACEHOLDER-macos-x64.dmg.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/PLACEHOLDER-macos-x64.dmg.txt) · [`scripts/build_macos_app.sh`](scripts/build_macos_app.sh) |
+| **macOS Intel** | Ready | [CanvasForge-0.6.0-beta.12-macos-x64.dmg](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/CanvasForge-0.6.0-beta.12-macos-x64.dmg) |
 | **Android** | Placeholder | [PLACEHOLDER-android.apk.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/PLACEHOLDER-android.apk.txt) |
 | **iOS** | Placeholder | [PLACEHOLDER-ios.ipa.txt](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/PLACEHOLDER-ios.ipa.txt) |
 | **All releases** | | [github.com/lukejmorrison/canvasforge/releases](https://github.com/lukejmorrison/canvasforge/releases) |
@@ -140,6 +142,17 @@ Then press **Print Screen**. CanvasForge will handle the rest.
 
 See the [full Omarchy setup](#omarchy-setup) below for scratchpad + multi-monitor configuration.
 
+### macOS Intel
+
+Download the Intel x86_64 DMG from GitHub Releases. You need an **Intel Mac** and **macOS 11 or later** (verified on Monterey 12.7.6). There is **no Apple Silicon DMG** yet.
+
+1. Download [CanvasForge-0.6.0-beta.12-macos-x64.dmg](https://github.com/lukejmorrison/canvasforge/releases/download/v0.6.0-beta.12/CanvasForge-0.6.0-beta.12-macos-x64.dmg) from the [v0.6.0-beta.12](https://github.com/lukejmorrison/canvasforge/releases/tag/v0.6.0-beta.12) release.
+2. Open the DMG and drag **CanvasForge** to **Applications**.
+3. First launch may need **right-click → Open**. The app is ad-hoc signed (no Developer ID).
+4. If you use capture, macOS may ask for **Screen Recording** and **Accessibility**.
+
+This Intel build includes a Monterey launch fix for leftover Saved Application State (late `NSApplicationDelegate`).
+
 ### Other Systems
 
 **Flatpak**
@@ -162,13 +175,6 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
-
-**macOS (Intel x86_64 .app for older Mac Minis)**
-```bash
-bash scripts/build_macos_app.sh
-open dist/CanvasForge.app
-```
-Build on macOS with a universal2 or Intel Python 3.11/3.12. The script pins PyQt6 `<6.8` (macOS 11+) and produces an ad-hoc-signed `.app` plus DMG under `dist/`. Apple Silicon can run the Intel build under Rosetta.
 
 ### Other Distributions
 
@@ -307,7 +313,7 @@ CanvasForge stays a native app: one repo, one version, native packages per OS. T
 
 | Phase | Focus | Status |
 |-------|--------|--------|
-| Now | AUR, Flatpak, macOS Intel `.app` | Ships today |
+| Now | AUR, Flatpak, macOS Intel DMG | Ships today |
 | 1 | Windows installer, macOS Apple Silicon, AppImage, multi-asset Releases | Help wanted |
 | 2 | Android companion + QR pairing on LAN / Tailscale | Later |
 | 3 | iOS, optional stores (winget, Homebrew, Flathub) | Last |

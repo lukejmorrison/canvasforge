@@ -1,11 +1,14 @@
-CanvasForge macOS Intel DMG — not attached as a prebuilt asset yet.
+CanvasForge macOS Intel DMG is attached to this release as a real disk image.
 
-Status: Ready to build on a Mac (Phase 1 will attach the DMG here)
-Planned asset: CanvasForge-<version>-macos-x64.dmg
+Download: CanvasForge-0.6.0-beta.12-macos-x64.dmg
+(not this text file)
 
-Build on macOS 11+ with Intel or universal2 Python 3.11/3.12:
-  bash scripts/build_macos_app.sh
-  open dist/CanvasForge.app
+Requires an Intel Mac and macOS 11+ (verified on Monterey 12.7.6).
+Open the DMG and drag CanvasForge to Applications.
+First launch may need right-click → Open (ad-hoc signed, no Developer ID).
+Capture may prompt for Screen Recording and Accessibility.
 
+Apple Silicon is not a real build yet.
+
+Install notes: https://github.com/lukejmorrison/canvasforge#macos-intel
 Roadmap: https://github.com/lukejmorrison/canvasforge/blob/master/ROADMAP.md
-Packaging help: https://github.com/lukejmorrison/canvasforge/discussions

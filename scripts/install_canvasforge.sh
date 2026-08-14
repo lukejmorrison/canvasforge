@@ -133,7 +133,7 @@ EOF
 
 if [[ "$(uname -s)" != "Linux" ]]; then
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        die "This installer targets Linux desktops. On macOS build the Intel .app with: bash scripts/build_macos_app.sh"
+        die "This installer targets Linux desktops. On an Intel Mac, download the macos-x64 DMG from GitHub Releases: https://github.com/lukejmorrison/canvasforge/releases"
     fi
     die "This installer targets Linux desktops."
 fi
