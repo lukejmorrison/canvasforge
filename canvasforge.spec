@@ -22,10 +22,13 @@ a = Analysis(
         "image_library_panel",
         "undo_manager",
         "plugin_manager",
+        "macos_restorable",
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[
+        str(ROOT / "packaging" / "macos" / "pyi_rth_disable_savedstate.py"),
+    ],
     excludes=[
         "tkinter",
         "PyQt6.QtWebEngine",
@@ -66,7 +69,11 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    argv_emulation=True,
+    # argv_emulation makes the windowed bootloader create NSApplication and
+    # process Apple Events before Python runs. That initializes NSPersistentUI
+    # without a secure-coding delegate and SIGILLs on Monterey. Qt handles
+    # Open With via QFileOpenEvent instead.
+    argv_emulation=False,
     target_arch="x86_64",
     codesign_identity=None,
     entitlements_file=None,
@@ -94,5 +101,7 @@ app = BUNDLE(
         "CFBundleVersion": "0.6.0",
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "11.0",
+        "NSQuitAlwaysKeepsWindows": False,
+        "ApplePersistenceIgnoreState": True,
     },
 )

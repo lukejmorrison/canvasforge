@@ -12,6 +12,16 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from macos_restorable import (
+    disable_macos_persistent_ui,
+    install_macos_secure_restorable_state,
+)
+
+# Discard leftover AppKit savedState before PyQt6/libqcocoa can load.
+# Creating NSApplication and then installing a YES delegate is the Monterey
+# ASI; this only touches the filesystem and defaults.
+install_macos_secure_restorable_state()
+
 # Force X11 backend on Wayland+NVIDIA to prevent compositor lockups
 # See: featurerequest/ProblemLog_WaylandCosmicLockup.md
 if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
@@ -83,7 +93,7 @@ from PyQt6 import sip
 from PyQt6.QtGui import (QPixmap, QImageReader, QAction, QActionGroup, QPainter, QIcon, QPen, QColor, QBrush,
                      QFont, QTransform, QClipboard, QImage, QKeySequence, QTextCursor, QTextCharFormat, QPalette,
                      QFontMetrics, QPainterPath, QPolygonF, QCursor, QShortcut, QDesktopServices)
-from PyQt6.QtCore import (Qt, QTimer, QPointF, QPoint, pyqtSignal, QRect, QRectF, QSize, QSettings,
+from PyQt6.QtCore import (Qt, QTimer, QEvent, QPointF, QPoint, pyqtSignal, QRect, QRectF, QSize, QSettings,
                           QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl, QElapsedTimer)
 import datetime
 from image_library_panel import ImageLibraryPanel
@@ -6503,6 +6513,15 @@ def resolve_toolbar_icon_file(base_dir: Path, name: str, theme: str = "default")
 
 class MainWindow(QMainWindow):
 
+    def event(self, event):
+        """Open With / Finder file drops after argv_emulation is disabled."""
+        if event.type() == QEvent.Type.FileOpen:
+            path = event.file()
+            if path and os.path.isfile(path) and path.lower().endswith(SUPPORTED_IMAGE_EXTENSIONS):
+                self.load_screenshot_for_editing(path)
+                return True
+        return super().event(event)
+
     def get_icon_resource(self, name):
         """
         Get an icon by name, respecting theme settings and prioritizing SVG.
@@ -8806,7 +8825,13 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
+    # Discard leftover savedState before QApplication(). Do not create
+    # NSApplication or install a YES Cocoa delegate here: that initializes
+    # NSPersistentUI without secure coding, then SIGILLs on Monterey when
+    # the oapp event restores windows.
+    install_macos_secure_restorable_state()
     app = QApplication(sys.argv)
+    disable_macos_persistent_ui()
     
     # Set consistent identity for Hyprland / Omarchy window rules and scratchpad
     app.setApplicationName("CanvasForge")
