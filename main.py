@@ -7,6 +7,8 @@ import math
 import base64
 import json
 import shlex
+import ctypes
+import ctypes.util
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -67,6 +69,204 @@ def is_allowed_agent_http_endpoint(endpoint: str) -> tuple[bool, str]:
             "(127.0.0.1, localhost, ::1). Use HTTPS for remote hosts."
         )
     return True, ""
+
+
+# Monterey AppKit aborts with SIGILL if window restoration starts without
+# secure coding and a later NSApplicationDelegate then requests it
+# ("NSApplicationDelegate was probably established too late"). Qt 6.7
+# libqcocoa creates NSApplication before QCocoaApplicationDelegate is
+# attached. Keep IMP callbacks and the delegate instance alive.
+_macos_objc_keepalive = []
+_macos_secure_restorable_installed = False
+_MACOS_SECURE_RESTORABLE_CLASS = b"CanvasForgeSecureRestorableDelegate"
+_MACOS_SECURE_RESTORABLE_SELECTOR = b"applicationSupportsSecureRestorableState:"
+_MACOS_SHOULD_RESTORE_SELECTOR = b"applicationShouldRestoreApplicationState:"
+_MACOS_SHOULD_SAVE_SELECTOR = b"applicationShouldSaveApplicationState:"
+
+
+def install_macos_secure_restorable_state(*, platform=None) -> bool:
+    """Opt into secure restorable state before Qt touches AppKit.
+
+    On Darwin, disable NSQuitAlwaysKeepsWindows so leftover
+    ~/Library/Saved Application State cannot abort the next launch, then
+    install a Cocoa delegate that returns YES for
+    applicationSupportsSecureRestorableState: before QApplication().
+    No-op on Linux/Windows. ctypes/objc only; no PyObjC dependency.
+    """
+    global _macos_secure_restorable_installed
+    if platform is None:
+        platform = sys.platform
+    if platform != "darwin":
+        return False
+
+    os.environ.setdefault("NSQuitAlwaysKeepsWindows", "NO")
+    if _macos_secure_restorable_installed:
+        return True
+    try:
+        installed = _install_cocoa_secure_restorable_delegate()
+    except Exception:
+        return False
+    if installed:
+        _macos_secure_restorable_installed = True
+    return installed
+
+
+def _load_mac_library(name: str):
+    """Load a macOS system library or framework. Returns None if absent."""
+    path = ctypes.util.find_library(name)
+    if path is None:
+        path = {
+            "objc": "/usr/lib/libobjc.A.dylib",
+            "Foundation": "/System/Library/Frameworks/Foundation.framework/Foundation",
+            "AppKit": "/System/Library/Frameworks/AppKit.framework/AppKit",
+        }.get(name)
+    if not path:
+        return None
+    try:
+        return ctypes.CDLL(path)
+    except OSError:
+        return None
+
+
+def _objc_msg_send(libobjc, restype, *argtypes):
+    """Typed objc_msgSend wrapper so we never mutate the shared symbol."""
+    return ctypes.CFUNCTYPE(restype, *argtypes)(("objc_msgSend", libobjc))
+
+
+def _install_cocoa_secure_restorable_delegate() -> bool:
+    """Create NSApplication with a secure-restorable-state delegate.
+
+    Qt 6.7 wraps any existing delegate as QCocoaApplicationDelegate's
+    reflectionDelegate, so this stays in the chain after QApplication().
+    Creating a plain NSApplication is safe: qt_redirectNSApplicationSendEvent
+    swizzles sendEvent when NSApp is not a QNSApplication.
+    """
+    libobjc = _load_mac_library("objc")
+    if libobjc is None:
+        return False
+    if _load_mac_library("Foundation") is None:
+        return False
+    if _load_mac_library("AppKit") is None:
+        return False
+
+    libobjc.objc_getClass.restype = ctypes.c_void_p
+    libobjc.objc_getClass.argtypes = [ctypes.c_char_p]
+    libobjc.objc_lookUpClass.restype = ctypes.c_void_p
+    libobjc.objc_lookUpClass.argtypes = [ctypes.c_char_p]
+    libobjc.sel_registerName.restype = ctypes.c_void_p
+    libobjc.sel_registerName.argtypes = [ctypes.c_char_p]
+    libobjc.objc_allocateClassPair.restype = ctypes.c_void_p
+    libobjc.objc_allocateClassPair.argtypes = [
+        ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t
+    ]
+    libobjc.class_addMethod.restype = ctypes.c_bool
+    libobjc.class_addMethod.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p
+    ]
+    libobjc.objc_registerClassPair.restype = None
+    libobjc.objc_registerClassPair.argtypes = [ctypes.c_void_p]
+
+    send_id = _objc_msg_send(
+        libobjc, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
+    )
+    send_id_id = _objc_msg_send(
+        libobjc, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
+    )
+    send_id_str = _objc_msg_send(
+        libobjc, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p
+    )
+    send_set_bool = _objc_msg_send(
+        libobjc, None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_byte, ctypes.c_void_p
+    )
+
+    def nsstring(text: bytes):
+        ns_string = libobjc.objc_getClass(b"NSString")
+        if not ns_string:
+            return None
+        return send_id_str(
+            ns_string, libobjc.sel_registerName(b"stringWithUTF8String:"), text
+        )
+
+    def set_default_bool(key: bytes, value: int) -> None:
+        ns_defaults = libobjc.objc_getClass(b"NSUserDefaults")
+        if not ns_defaults:
+            return
+        defaults = send_id(ns_defaults, libobjc.sel_registerName(b"standardUserDefaults"))
+        key_ref = nsstring(key)
+        if not defaults or not key_ref:
+            return
+        send_set_bool(
+            defaults, libobjc.sel_registerName(b"setBool:forKey:"), value, key_ref
+        )
+
+    # Ignore leftover savedState before NSApplication exists.
+    set_default_bool(b"NSQuitAlwaysKeepsWindows", 0)
+    set_default_bool(b"ApplePersistenceIgnoreState", 1)
+
+    ns_object = libobjc.objc_getClass(b"NSObject")
+    if not ns_object:
+        return False
+    cls = libobjc.objc_lookUpClass(_MACOS_SECURE_RESTORABLE_CLASS)
+    if not cls:
+        cls = libobjc.objc_allocateClassPair(
+            ns_object, _MACOS_SECURE_RESTORABLE_CLASS, 0
+        )
+        if not cls:
+            return False
+
+        bool_imp = ctypes.CFUNCTYPE(
+            ctypes.c_byte, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
+        )
+
+        def _return_yes(_self, _cmd, _arg):
+            return 1
+
+        def _return_no(_self, _cmd, _arg):
+            return 0
+
+        yes_imp = bool_imp(_return_yes)
+        no_imp = bool_imp(_return_no)
+        _macos_objc_keepalive.extend((yes_imp, no_imp, _return_yes, _return_no))
+        encoding = b"c@:@"
+        libobjc.class_addMethod(
+            cls,
+            libobjc.sel_registerName(_MACOS_SECURE_RESTORABLE_SELECTOR),
+            yes_imp,
+            encoding,
+        )
+        libobjc.class_addMethod(
+            cls,
+            libobjc.sel_registerName(_MACOS_SHOULD_RESTORE_SELECTOR),
+            no_imp,
+            encoding,
+        )
+        libobjc.class_addMethod(
+            cls,
+            libobjc.sel_registerName(_MACOS_SHOULD_SAVE_SELECTOR),
+            no_imp,
+            encoding,
+        )
+        libobjc.objc_registerClassPair(cls)
+
+    instance = send_id(cls, libobjc.sel_registerName(b"alloc"))
+    if not instance:
+        return False
+    instance = send_id(instance, libobjc.sel_registerName(b"init"))
+    if not instance:
+        return False
+    send_id(instance, libobjc.sel_registerName(b"retain"))
+    _macos_objc_keepalive.append(instance)
+
+    ns_app_cls = libobjc.objc_getClass(b"NSApplication")
+    if not ns_app_cls:
+        return False
+    ns_app = send_id(ns_app_cls, libobjc.sel_registerName(b"sharedApplication"))
+    if not ns_app:
+        return False
+    send_id_id(ns_app, libobjc.sel_registerName(b"setDelegate:"), instance)
+    set_default_bool(b"NSQuitAlwaysKeepsWindows", 0)
+    set_default_bool(b"ApplePersistenceIgnoreState", 1)
+    return True
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -8806,6 +9006,11 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
+    # Must run before QApplication(): Qt/libqcocoa creates NSApplication
+    # and enters the run loop before its Cocoa delegate implements
+    # applicationSupportsSecureRestorableState:. On Monterey that SIGILLs
+    # when leftover Saved Application State is restored.
+    install_macos_secure_restorable_state()
     app = QApplication(sys.argv)
     
     # Set consistent identity for Hyprland / Omarchy window rules and scratchpad

@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **macOS Monterey launch crash:** Opening the Intel `.app` on 12.7 no longer dies with `EXC_BAD_INSTRUCTION` / SIGILL about 8s after launch when leftover Saved Application State exists. An early Cocoa delegate opts into secure restorable state before `QApplication()`, and `NSQuitAlwaysKeepsWindows` is disabled so a poisoned `savedState` cannot abort the next launch. Linux/Omarchy is unchanged.
+
 ## [0.6.0-beta.12] - 2026-08-13
 
 ### Added

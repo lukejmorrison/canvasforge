@@ -94,5 +94,8 @@ app = BUNDLE(
         "CFBundleVersion": "0.6.0",
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "11.0",
+        # Monterey restores windows before Qt attaches its Cocoa delegate.
+        # Disable AppKit restorable state so leftover savedState cannot SIGILL.
+        "NSQuitAlwaysKeepsWindows": False,
     },
 )

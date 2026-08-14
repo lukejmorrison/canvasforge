@@ -49,6 +49,7 @@ fi
 echo "App ready: $APP_PATH"
 echo "Manual smoke checklist:"
 echo "  1) Launch .app (Retina thumbs / Cmd shortcuts / Preferences in app menu)"
+echo "     Launch twice after a force-quit so leftover savedState cannot SIGILL"
 echo "  2) Select tool: marquee → hand drag → snap back to hole"
 echo "  3) Library scroll with many screenshots"
 echo "  4) Fill / blur / eyedropper feel responsive"
