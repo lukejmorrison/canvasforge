@@ -29,11 +29,23 @@ package() {
     featurerequest \
     image_library_panel.py \
     main.py \
+    mobile_qr.py \
+    mobile_sync.py \
+    vendor \
     plugin_manager.py \
     plugins \
     requirements.txt \
     undo_manager.py \
     "${pkgdir}/usr/share/canvasforge/"
+
+  install -dm755 "${pkgdir}/usr/share/canvasforge/mobile"
+  install -m644 \
+    mobile/README.md \
+    mobile/index.html \
+    mobile/app.js \
+    mobile/style.css \
+    mobile/manifest.webmanifest \
+    "${pkgdir}/usr/share/canvasforge/mobile/"
 
   install -Dm755 /dev/stdin "${pkgdir}/usr/bin/canvasforge" <<'EOF'
 #!/usr/bin/env bash

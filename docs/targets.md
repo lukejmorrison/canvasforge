@@ -18,8 +18,8 @@ Agents and contributors implement and verify on **Omarchy Arch Linux** first. Ot
 | Linux canary | Lint / import / packaging smoke on Ubuntu or Arch |
 | Windows canary | PyInstaller + installer |
 | macOS canary | Intel and Apple Silicon `.app` / DMG |
-| Android | Flutter companion APK (Phase 2) |
-| iOS | TestFlight / signed IPA on macOS runners (Phase 3) |
+| Android | Flutter companion in `mobile/app` (`flutter run` / `flutter build apk`) |
+| iOS | Flutter companion in `mobile/app` (`flutter run` / Xcode). Signed IPA on a Mac. |
 
 See [ROADMAP.md](../ROADMAP.md) for phase order.
 

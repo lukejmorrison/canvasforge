@@ -2,6 +2,7 @@ import sys
 import tempfile
 import subprocess
 import os
+import socket
 import time
 import math
 import base64
@@ -97,8 +98,34 @@ from PyQt6.QtCore import (Qt, QTimer, QEvent, QPointF, QPoint, pyqtSignal, QRect
                           QByteArray, QMimeData, QBuffer, QIODevice, QSizeF, QUrl, QElapsedTimer)
 import datetime
 from image_library_panel import ImageLibraryPanel
+from mobile_sync import (
+    DEFAULT_PORT,
+    MobileSyncService,
+    pairing_qr_matrix,
+    pasteable_pairing_code,
+    save_grab_to_library,
+)
 from undo_manager import UndoManager, CallbackAction, ImageEditAction, RegionImageEditAction
 from plugin_manager import PluginManager
+
+
+def qr_pixmap_from_matrix(matrix, scale=7, quiet=4):
+    """Render a QR module matrix to a high-contrast pixmap for Settings."""
+    size = len(matrix)
+    img_size = (size + quiet * 2) * scale
+    image = QImage(img_size, img_size, QImage.Format.Format_RGB32)
+    image.fill(QColor("white"))
+    ink = QColor("black")
+    for row, modules in enumerate(matrix):
+        for col, bit in enumerate(modules):
+            if not bit:
+                continue
+            origin_x = (col + quiet) * scale
+            origin_y = (row + quiet) * scale
+            for y in range(scale):
+                for x in range(scale):
+                    image.setPixelColor(origin_x + x, origin_y + y, ink)
+    return QPixmap.fromImage(image)
 
 
 class ToolType(Enum):
@@ -5243,10 +5270,11 @@ def apply_dark_theme(app):
 class PreferencesDialog(QDialog):
     """Preferences dialog with organized settings sections."""
     
-    def __init__(self, parent=None, settings=None, current_save_dir=None, current_library_dir=None, plugin_manager=None):
+    def __init__(self, parent=None, settings=None, current_save_dir=None, current_library_dir=None, plugin_manager=None, mobile_sync=None):
         super().__init__(parent)
         self.settings = settings
         self.plugin_manager = plugin_manager
+        self.mobile_sync = mobile_sync
         self.main_window = parent
         self.setWindowTitle("Preferences")
         self.setMinimumWidth(550)
@@ -5259,6 +5287,9 @@ class PreferencesDialog(QDialog):
         # Track if values changed
         self._save_dir_changed = False
         self._library_dir_changed = False
+        self._mobile_poll = QTimer(self)
+        self._mobile_poll.setInterval(800)
+        self._mobile_poll.timeout.connect(self._refresh_mobile_pair_status)
         
         self._setup_ui()
     
@@ -5277,6 +5308,7 @@ class PreferencesDialog(QDialog):
         self.tab_widget.addTab(self._create_window_tab(), "Window")
         self.tab_widget.addTab(self._create_plugins_tab(), "Plugins")
         self.tab_widget.addTab(self._create_agent_tab(), "Agent")
+        self.tab_widget.addTab(self._create_mobile_tab(), "Mobile")
         self.tab_widget.addTab(self._create_about_tab(), "About")
         
         # Dialog buttons
@@ -6357,6 +6389,210 @@ class PreferencesDialog(QDialog):
     def get_agent_prompt_template(self) -> str:
         return self.agent_prompt_edit.toPlainText().strip()
 
+    def _create_mobile_tab(self):
+        """Buzz-style Settings → Mobile pairing into the shared Image Library."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(16)
+
+        intro = QLabel(
+            "Pair a phone on the same LAN or Tailscale. Grabs from either device "
+            "land in the Image Library folder, then you can Send to Agent as usual. "
+            "No CanvasForge account and no public website."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(intro)
+
+        library_group = QGroupBox("Shared grab folder")
+        library_form = QFormLayout(library_group)
+        self.mobile_library_label = QLabel(self._library_dir or "(Image Library folder)")
+        self.mobile_library_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        library_form.addRow("Image Library:", self.mobile_library_label)
+        library_hint = QLabel(
+            "Desktop: annotate, then click Export Canvas in the Image Library. "
+            "Phone uploads use this same folder."
+        )
+        library_hint.setWordWrap(True)
+        library_hint.setStyleSheet("color: #888; font-size: 11px;")
+        library_form.addRow("", library_hint)
+        layout.addWidget(library_group)
+
+        pair_group = QGroupBox("Pair Mobile Device")
+        pair_layout = QVBoxLayout(pair_group)
+        scan_hint = QLabel("Scan this QR code with the CanvasForge mobile app to securely pair")
+        scan_hint.setWordWrap(True)
+        pair_layout.addWidget(scan_hint)
+
+        self.mobile_qr_label = QLabel()
+        self.mobile_qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.mobile_qr_label.setMinimumHeight(220)
+        self.mobile_qr_label.setStyleSheet("background: #fff; border-radius: 8px;")
+        self.mobile_qr_label.setText("Click Pair Mobile Device to show a QR code.")
+        pair_layout.addWidget(self.mobile_qr_label)
+
+        self.mobile_sas_label = QLabel("Security code: —")
+        self.mobile_sas_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.mobile_sas_label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        pair_layout.addWidget(self.mobile_sas_label)
+
+        self.mobile_paste_edit = QLineEdit()
+        self.mobile_paste_edit.setReadOnly(True)
+        self.mobile_paste_edit.setPlaceholderText("Pasteable pairing code appears here")
+        pair_layout.addWidget(self.mobile_paste_edit)
+
+        self.mobile_pair_status = QLabel("Not pairing.")
+        self.mobile_pair_status.setWordWrap(True)
+        self.mobile_pair_status.setStyleSheet("color: #888; font-size: 11px;")
+        pair_layout.addWidget(self.mobile_pair_status)
+
+        buttons = QHBoxLayout()
+        self.mobile_pair_btn = QPushButton("Pair Mobile Device")
+        self.mobile_pair_btn.clicked.connect(self._start_mobile_pairing)
+        buttons.addWidget(self.mobile_pair_btn)
+        self.mobile_confirm_btn = QPushButton("Confirm pairing")
+        self.mobile_confirm_btn.setEnabled(False)
+        self.mobile_confirm_btn.clicked.connect(self._confirm_mobile_pairing)
+        buttons.addWidget(self.mobile_confirm_btn)
+        self.mobile_cancel_btn = QPushButton("Cancel")
+        self.mobile_cancel_btn.clicked.connect(self._cancel_mobile_pairing)
+        buttons.addWidget(self.mobile_cancel_btn)
+        pair_layout.addLayout(buttons)
+        layout.addWidget(pair_group)
+
+        devices_group = QGroupBox("Paired devices")
+        devices_layout = QVBoxLayout(devices_group)
+        self.mobile_device_list = QListWidget()
+        self.mobile_device_list.setMinimumHeight(80)
+        devices_layout.addWidget(self.mobile_device_list)
+        unpair_btn = QPushButton("Remove selected device")
+        unpair_btn.clicked.connect(self._unpair_selected_mobile)
+        devices_layout.addWidget(unpair_btn)
+        layout.addWidget(devices_group)
+
+        listen_group = QGroupBox("Listener")
+        listen_form = QFormLayout(listen_group)
+        self.mobile_port_spin = QSpinBox()
+        self.mobile_port_spin.setRange(1024, 65535)
+        saved_port = DEFAULT_PORT
+        if self.settings:
+            saved_port = int(self.settings.value("mobile/listen_port", DEFAULT_PORT) or DEFAULT_PORT)
+        self.mobile_port_spin.setValue(saved_port)
+        listen_form.addRow("LAN port:", self.mobile_port_spin)
+        listen_hint = QLabel(
+            "After pairing, CanvasForge keeps listening so the phone can send grabs "
+            "without opening a website."
+        )
+        listen_hint.setWordWrap(True)
+        listen_hint.setStyleSheet("color: #888; font-size: 11px;")
+        listen_form.addRow("", listen_hint)
+        layout.addWidget(listen_group)
+
+        layout.addStretch()
+        self._refresh_mobile_device_list()
+        self._refresh_mobile_pair_status()
+        return widget
+
+    def _start_mobile_pairing(self):
+        if self.mobile_sync is None:
+            QMessageBox.warning(self, "Mobile pairing", "Mobile sync is not available in this window.")
+            return
+        if self.settings:
+            self.settings.setValue("mobile/listen_port", int(self.mobile_port_spin.value()))
+            self.mobile_sync.port = int(self.mobile_port_spin.value())
+        try:
+            session = self.mobile_sync.begin_pairing()
+        except OSError as exc:
+            QMessageBox.warning(self, "Mobile pairing", f"Could not listen on the LAN:\n\n{exc}")
+            return
+        payload = session.payload()
+        matrix = pairing_qr_matrix(payload)
+        self.mobile_qr_label.setPixmap(
+            qr_pixmap_from_matrix(matrix).scaled(
+                240, 240, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.FastTransformation
+            )
+        )
+        self.mobile_sas_label.setText(f"Security code: {session.security_code}")
+        self.mobile_paste_edit.setText(pasteable_pairing_code(payload))
+        self.mobile_confirm_btn.setEnabled(True)
+        self.mobile_pair_status.setText(
+            "Waiting for the phone to scan. Confirm the security code on both devices."
+        )
+        self._mobile_poll.start()
+
+    def _confirm_mobile_pairing(self):
+        if self.mobile_sync is None:
+            return
+        try:
+            result = self.mobile_sync.confirm_desktop()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Mobile pairing", str(exc))
+            return
+        if result.get("state") == "paired":
+            self.mobile_pair_status.setText("Paired. The phone can send grabs to the Image Library.")
+            self.mobile_confirm_btn.setEnabled(False)
+            self._mobile_poll.stop()
+            self._refresh_mobile_device_list()
+        else:
+            self.mobile_pair_status.setText(
+                "Desktop confirmed. Waiting for the phone to confirm the same security code."
+            )
+
+    def _cancel_mobile_pairing(self):
+        if self.mobile_sync is not None:
+            self.mobile_sync.cancel_pairing()
+        self.mobile_qr_label.setPixmap(QPixmap())
+        self.mobile_qr_label.setText("Click Pair Mobile Device to show a QR code.")
+        self.mobile_sas_label.setText("Security code: —")
+        self.mobile_paste_edit.clear()
+        self.mobile_confirm_btn.setEnabled(False)
+        self.mobile_pair_status.setText("Pairing cancelled.")
+        self._mobile_poll.stop()
+
+    def _refresh_mobile_pair_status(self):
+        if self.mobile_sync is None:
+            return
+        session = self.mobile_sync.current_session()
+        if session is None:
+            return
+        state = session.state()
+        if state == "phone_confirmed":
+            self.mobile_pair_status.setText(
+                "Phone is waiting. Confirm this security code matches, then click Confirm pairing."
+            )
+        elif state == "paired":
+            self.mobile_pair_status.setText("Paired. The phone can send grabs to the Image Library.")
+            self.mobile_confirm_btn.setEnabled(False)
+            self._mobile_poll.stop()
+            self._refresh_mobile_device_list()
+        elif state == "expired":
+            self.mobile_pair_status.setText("That pairing code expired. Click Pair Mobile Device again.")
+            self.mobile_confirm_btn.setEnabled(False)
+            self._mobile_poll.stop()
+
+    def _refresh_mobile_device_list(self):
+        self.mobile_device_list.clear()
+        if self.mobile_sync is None:
+            return
+        for device in self.mobile_sync.store.devices():
+            item = QListWidgetItem(device.get("name") or "Phone")
+            item.setData(Qt.ItemDataRole.UserRole, device.get("id"))
+            self.mobile_device_list.addItem(item)
+
+    def _unpair_selected_mobile(self):
+        if self.mobile_sync is None:
+            return
+        item = self.mobile_device_list.currentItem()
+        if item is None:
+            return
+        device_id = item.data(Qt.ItemDataRole.UserRole)
+        if device_id:
+            self.mobile_sync.store.remove_device(str(device_id))
+        self._refresh_mobile_device_list()
+
+    def get_mobile_listen_port(self) -> int:
+        return int(self.mobile_port_spin.value())
+
     def _create_about_tab(self):
         """Create the About tab."""
         widget = QWidget()
@@ -6463,6 +6699,7 @@ class PreferencesDialog(QDialog):
             self.settings.setValue("agent/command_template", self.get_agent_command_template())
             self.settings.setValue("agent/http_endpoint", self.get_agent_http_endpoint())
             self.settings.setValue("agent/prompt_template", self.get_agent_prompt_template())
+            self.settings.setValue("mobile/listen_port", self.get_mobile_listen_port())
         super().accept()
 
 
@@ -6624,6 +6861,7 @@ class MainWindow(QMainWindow):
         self.library_panel.assetActivated.connect(self._import_library_asset)
         self.library_panel.exportRequested.connect(self._export_canvas_to_library)
         self.library_panel.folderChanged.connect(self._on_library_folder_changed)
+        self._init_mobile_sync()
 
         self._splitter.addWidget(self.library_panel)
         self._splitter.addWidget(self.view)
@@ -7598,7 +7836,8 @@ class MainWindow(QMainWindow):
             settings=self.settings,
             current_save_dir=self.default_save_dir,
             current_library_dir=current_library_dir,
-            plugin_manager=self.plugin_manager
+            plugin_manager=self.plugin_manager,
+            mobile_sync=getattr(self, "mobile_sync", None),
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Apply save folder change
@@ -7613,7 +7852,21 @@ class MainWindow(QMainWindow):
             new_library = dialog.get_library_folder()
             if new_library and hasattr(self, 'library_panel'):
                 self.library_panel.set_root_path(new_library, persist=True)
+                if hasattr(self, "mobile_sync") and self.mobile_sync is not None:
+                    self.mobile_sync.set_library_dir(new_library)
                 self._status_bar.showMessage(f"Screenshot folder set to {new_library}", 5000)
+
+            if hasattr(self, "mobile_sync") and self.mobile_sync is not None:
+                new_port = dialog.get_mobile_listen_port()
+                if int(self.mobile_sync.port) != new_port:
+                    was_listening = self.mobile_sync.is_listening()
+                    self.mobile_sync.stop()
+                    self.mobile_sync.port = new_port
+                    if was_listening or self.mobile_sync.store.devices():
+                        try:
+                            self.mobile_sync.start()
+                        except OSError:
+                            pass
             
             # Apply toolbar order change
             new_toolbar_order = dialog.get_toolbar_order()
@@ -8715,6 +8968,30 @@ class MainWindow(QMainWindow):
             self.add_artifact(file_path)
         self._status_bar.showMessage(f"Imported {Path(file_path).name} from library", 4000)
 
+    def _init_mobile_sync(self):
+        library_dir = self.library_panel.current_root_path()
+        port = int(self.settings.value("mobile/listen_port", DEFAULT_PORT) or DEFAULT_PORT)
+        self.mobile_sync = MobileSyncService(
+            library_dir,
+            port=port,
+            desktop_name=socket.gethostname() or "CanvasForge",
+            on_grab_saved=self._on_mobile_grab_saved,
+        )
+        if self.mobile_sync.store.devices():
+            try:
+                self.mobile_sync.start()
+            except OSError:
+                pass
+
+    def _on_mobile_grab_saved(self, path):
+        QTimer.singleShot(0, lambda: self._refresh_library_after_mobile_grab(path))
+
+    def _refresh_library_after_mobile_grab(self, path):
+        if hasattr(self, "library_panel"):
+            self.library_panel.refresh()
+        name = Path(path).name
+        self._status_bar.showMessage(f"Mobile grab saved to Image Library: {name}", 5000)
+
     def _export_canvas_to_library(self):
         if not hasattr(self, 'library_panel'):
             return
@@ -8726,14 +9003,24 @@ class MainWindow(QMainWindow):
         if image is None:
             self._status_bar.showMessage("Nothing to export", 4000)
             return
-        target_dir.mkdir(parents=True, exist_ok=True)
-        file_name = f"canvas_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        export_path = target_dir / file_name
-        image.save(str(export_path))
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        if not image.save(buffer, "PNG"):
+            self._status_bar.showMessage("ERROR: Failed to encode canvas for the library", 5000)
+            return
+        export_path = save_grab_to_library(
+            target_dir,
+            bytes(buffer.data()),
+            source="desktop",
+            content_type="image/png",
+            filename_hint=f"canvas_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+        )
         self._status_bar.showMessage(f"Exported canvas to {export_path}", 5000)
         self.library_panel.refresh()
 
     def _on_library_folder_changed(self, folder):
+        if hasattr(self, "mobile_sync") and self.mobile_sync is not None:
+            self.mobile_sync.set_library_dir(Path(folder))
         self._status_bar.showMessage(f"Library folder: {folder}", 3000)
 
     def _capture_scene_image(self, target_items=None):
@@ -8820,6 +9107,9 @@ class MainWindow(QMainWindow):
         screens = QApplication.screens()
         if current_screen in screens:
             self.settings.setValue("window/last_monitor_index", screens.index(current_screen))
+
+        if hasattr(self, "mobile_sync") and self.mobile_sync is not None:
+            self.mobile_sync.stop()
 
         super().closeEvent(event)
 
