@@ -5,10 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **Image Library columns:** A **Columns** dropdown next to Sort lets you show 1, 2, or 3 thumbnail columns so more images fit in the sidebar width. The default stays one column.
+- **Image Library columns:** A **Columns** dropdown next to Sort lets you show 1, 2, or 3 thumbnail columns so more images fit in the sidebar width. One column is a vertical stack of square tiles that fill the sidebar width; 2 and 3 columns share the row.
 
 ### Changed
 - **Image Library:** The left sidebar now shows large image thumbnails instead of filename-heavy list rows. Each thumbnail fills its tile edge-to-edge (cover crop, no grey letterbox or filename caption). Hover a thumbnail to see the full file path; right-click and choose **Copy path** to copy it to the clipboard. Name, size, and modified time stay in the details pane.
+
+### Fixed
+- **Image Library columns:** Choosing 2 or 3 columns now shows that many thumbnails per row. Qt IconMode was laying out with wrapping still off from list mode, then a later resize rebuilt the grid (the flicker). Wrapping and tile size are set before switching view mode, and the list viewport re-applies layout when its width changes. One column is a stack of square cards as wide as the sidebar, with no empty column beside the tiles.
 
 ## [0.6.0-beta.11] - 2026-08-13
 

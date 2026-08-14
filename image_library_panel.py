@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from PyQt6.QtCore import (
+    QEvent,
     QFileInfo,
     QFileSystemWatcher,
     QModelIndex,
@@ -105,25 +106,21 @@ def clamp_column_count(columns: object) -> int:
 
 
 def tile_size_for_columns(viewport_width: int, columns: int) -> int:
-    """Square tile edge so ``columns`` thumbnails fit in ``viewport_width``."""
-    cols = clamp_column_count(columns)
-    available = max(1, int(viewport_width))
-    if cols <= 1:
-        return display_thumb_size(available)
-    return max(1, available // cols)
+    """Square tile edge so ``columns`` thumbnails fit in ``viewport_width``.
 
-
-def item_size_for_columns(viewport_width: int, columns: int) -> QSize:
-    """Item size for the current column count.
-
-    One column keeps the full-width list row. Two and three columns use a
-    square tile of ``viewport_width / N`` so more thumbs fit in the sidebar.
+    QListView IconMode wraps when ``N * tile > viewport.right()`` (width - 1),
+    so an exact ``width // N`` tile drops the last column. One column uses the
+    same slack: ``available - 1``, so the tile fills the viewport with no empty
+    column beside it.
     """
     cols = clamp_column_count(columns)
     available = max(1, int(viewport_width))
-    if cols <= 1:
-        return QSize(available, item_row_height(available))
-    tile = tile_size_for_columns(available, cols)
+    return max(1, (available - 1) // cols)
+
+
+def item_size_for_columns(viewport_width: int, columns: int) -> QSize:
+    """Square item size for the current column count."""
+    tile = tile_size_for_columns(viewport_width, columns)
     return QSize(tile, tile)
 
 
@@ -537,6 +534,10 @@ class ImageLibraryPanel(QWidget):
         self._thumbnail_cache.thumbnailReady.connect(self._on_thumbnail_ready)
         self._column_count = self._read_column_count()
         self._applying_layout = False
+        self._layout_settle_timer = QTimer(self)
+        self._layout_settle_timer.setSingleShot(True)
+        self._layout_settle_timer.setInterval(0)
+        self._layout_settle_timer.timeout.connect(self._apply_column_layout)
 
         self._build_ui()
         self._install_shortcuts()
@@ -579,10 +580,10 @@ class ImageLibraryPanel(QWidget):
         self._delegate.set_columns(self._column_count)
 
         self.list_view = QListView()
-        self.list_view.setViewMode(QListView.ViewMode.ListMode)
+        self.list_view.setViewMode(QListView.ViewMode.IconMode)
         self.list_view.setResizeMode(QListView.ResizeMode.Adjust)
         self.list_view.setMovement(QListView.Movement.Static)
-        self.list_view.setSpacing(6)
+        self.list_view.setSpacing(0)
         self.list_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_view.setUniformItemSizes(True)
         self.list_view.setWrapping(False)
@@ -595,6 +596,7 @@ class ImageLibraryPanel(QWidget):
         self.list_view.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_view.setModel(self._proxy)
+        self.list_view.viewport().installEventFilter(self)
         layout.addWidget(self.list_view, 1)
 
         footer = QVBoxLayout()
@@ -705,6 +707,15 @@ class ImageLibraryPanel(QWidget):
         super().showEvent(event)
         self._apply_column_layout()
 
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # type: ignore[override]
+        if (
+            hasattr(self, "list_view")
+            and obj is self.list_view.viewport()
+            and event.type() == QEvent.Type.Resize
+        ):
+            self._apply_column_layout()
+        return super().eventFilter(obj, event)
+
     def _handle_sort_change(self, idx: int) -> None:
         data = self.sort_combo.itemData(idx)
         if not data:
@@ -727,6 +738,7 @@ class ImageLibraryPanel(QWidget):
         self._delegate.set_columns(value)
         self._sync_columns_combo()
         self._apply_column_layout()
+        self._layout_settle_timer.start()
         if persist and self.settings is not None and hasattr(self.settings, "setValue"):
             self.settings.setValue(COLUMNS_SETTINGS_KEY, value)
 
@@ -753,25 +765,48 @@ class ImageLibraryPanel(QWidget):
         try:
             columns = clamp_column_count(self._column_count)
             viewport_width = max(1, self.list_view.viewport().width())
+            vbar = self.list_view.verticalScrollBar()
+            # Reserve the scrollbar gutter only for wrapping grids. One-column
+            # tiles must fill the viewport; wrapping is off so a later bar
+            # cannot drop a second column.
+            if (
+                columns > 1
+                and vbar is not None
+                and not vbar.isVisible()
+            ):
+                viewport_width = max(1, viewport_width - max(vbar.sizeHint().width(), 0))
             size = item_size_for_columns(viewport_width, columns)
             self._delegate.set_columns(columns)
-            if columns <= 1:
-                self.list_view.setViewMode(QListView.ViewMode.ListMode)
-                self.list_view.setWrapping(False)
-                self.list_view.setSpacing(6)
-                self.list_view.setGridSize(QSize())
-            else:
-                self.list_view.setViewMode(QListView.ViewMode.IconMode)
-                self.list_view.setFlow(QListView.Flow.LeftToRight)
-                self.list_view.setWrapping(True)
-                self.list_view.setSpacing(0)
-                self.list_view.setGridSize(size)
-                self.list_view.setIconSize(size)
-            self.list_view.setResizeMode(QListView.ResizeMode.Adjust)
+            # IconMode's setViewMode() lays out immediately. Set flow, wrapping,
+            # and grid size first so 1/2/3 all use the same tile grid.
+            self.list_view.setContentsMargins(0, 0, 0, 0)
+            self.list_view.setViewportMargins(0, 0, 0, 0)
             self.list_view.setMovement(QListView.Movement.Static)
+            self.list_view.setResizeMode(QListView.ResizeMode.Adjust)
             self.list_view.setUniformItemSizes(True)
             self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.list_view.setSpacing(0)
+            self.list_view.setGridSize(size)
+            self.list_view.setIconSize(size)
+            if columns <= 1:
+                self.list_view.setFlow(QListView.Flow.TopToBottom)
+                self.list_view.setWrapping(False)
+            else:
+                self.list_view.setFlow(QListView.Flow.LeftToRight)
+                self.list_view.setWrapping(True)
+            self.list_view.setViewMode(QListView.ViewMode.IconMode)
+            self.list_view.setMovement(QListView.Movement.Static)
             self.list_view.doItemsLayout()
+            after_vp = max(1, self.list_view.viewport().width())
+            fitted = item_size_for_columns(after_vp, columns)
+            needs_refit = fitted != size and (
+                columns <= 1 or columns * size.width() > after_vp - 1
+            )
+            if needs_refit:
+                size = fitted
+                self.list_view.setGridSize(size)
+                self.list_view.setIconSize(size)
+                self.list_view.doItemsLayout()
         finally:
             self._applying_layout = False
 

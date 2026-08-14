@@ -78,8 +78,10 @@ def test_delegate_size_hint_is_large_thumbnail(qapp):
     option = QStyleOptionViewItem()
     option.rect = QRect(0, 0, 220, 20)
     hint = delegate.sizeHint(option, QModelIndex())
-    assert hint == QSize(220, item_row_height(220))
-    assert hint.height() >= 200
+    assert hint == item_size_for_columns(220, 1)
+    assert hint.width() == hint.height()
+    assert hint.width() == tile_size_for_columns(220, 1)
+    assert hint.width() == 219
 
 
 def test_clamp_column_count_stays_in_one_to_three():
@@ -94,14 +96,18 @@ def test_clamp_column_count_stays_in_one_to_three():
 
 
 def test_tile_size_tracks_viewport_divided_by_columns():
-    assert tile_size_for_columns(220, 1) == display_thumb_size(220)
-    assert item_size_for_columns(220, 1) == QSize(220, 200)
-    assert tile_size_for_columns(220, 2) == 110
-    assert item_size_for_columns(220, 2) == QSize(110, 110)
+    assert tile_size_for_columns(220, 1) == 219
+    assert item_size_for_columns(220, 1) == QSize(219, 219)
+    assert tile_size_for_columns(220, 2) == 109
+    assert item_size_for_columns(220, 2) == QSize(109, 109)
     assert tile_size_for_columns(220, 3) == 73
     assert item_size_for_columns(220, 3) == QSize(73, 73)
-    assert tile_size_for_columns(300, 2) == 150
-    assert tile_size_for_columns(300, 3) == 100
+    assert tile_size_for_columns(300, 1) == 299
+    assert tile_size_for_columns(300, 2) == 149
+    assert tile_size_for_columns(300, 3) == 99
+    assert tile_size_for_columns(220, 1) == 219
+    assert tile_size_for_columns(220, 2) * 2 <= 219
+    assert tile_size_for_columns(220, 3) * 3 <= 219
 
 
 def test_delegate_size_hint_follows_column_count(qapp):
@@ -109,9 +115,9 @@ def test_delegate_size_hint_follows_column_count(qapp):
     option = QStyleOptionViewItem()
     option.rect = QRect(0, 0, 220, 20)
     delegate.set_columns(1)
-    assert delegate.sizeHint(option, QModelIndex()) == QSize(220, 200)
+    assert delegate.sizeHint(option, QModelIndex()) == QSize(219, 219)
     delegate.set_columns(2)
-    assert delegate.sizeHint(option, QModelIndex()) == QSize(110, 110)
+    assert delegate.sizeHint(option, QModelIndex()) == QSize(109, 109)
     delegate.set_columns(3)
     assert delegate.sizeHint(option, QModelIndex()) == QSize(73, 73)
 
@@ -147,8 +153,9 @@ def test_panel_defaults_to_one_column(qapp, tmp_path):
     assert panel.column_count() == 1
     assert panel.columns_combo.currentData() == 1
     assert [panel.columns_combo.itemData(i) for i in range(panel.columns_combo.count())] == [1, 2, 3]
-    assert panel.list_view.viewMode() == QListView.ViewMode.ListMode
+    assert panel.list_view.viewMode() == QListView.ViewMode.IconMode
     assert panel.list_view.isWrapping() is False
+    assert panel.list_view.flow() == QListView.Flow.TopToBottom
 
 
 def test_panel_switches_to_wrapping_grid_for_two_and_three_columns(qapp, tmp_path):
@@ -163,34 +170,73 @@ def test_panel_switches_to_wrapping_grid_for_two_and_three_columns(qapp, tmp_pat
     assert panel.list_view.isWrapping() is True
     viewport = panel.list_view.viewport().width()
     tile = panel.list_view.gridSize().width()
-    assert tile == viewport // 2
-    assert abs(tile * 2 - viewport) < 3
+    assert tile * 2 <= viewport - 1
 
     panel.set_column_count(3)
     assert panel.column_count() == 3
     viewport = panel.list_view.viewport().width()
     tile = panel.list_view.gridSize().width()
-    assert tile == viewport // 3
-    assert abs(tile * 3 - viewport) < 3
+    assert tile * 3 <= viewport - 1
 
     panel.set_column_count(1)
-    assert panel.list_view.viewMode() == QListView.ViewMode.ListMode
+    qapp.processEvents()
+    assert panel.list_view.viewMode() == QListView.ViewMode.IconMode
     assert panel.list_view.isWrapping() is False
+    assert panel.list_view.flow() == QListView.Flow.TopToBottom
+    one_col_viewport = panel.list_view.viewport().width()
+    one_col_tile = panel.list_view.gridSize().width()
+    assert one_col_tile == tile_size_for_columns(one_col_viewport, 1)
+    assert one_col_tile == one_col_viewport - 1
+    assert panel.list_view.gridSize().height() == one_col_tile
+
+    panel.set_column_count(2)
+    qapp.processEvents()
+    assert panel.list_view.isWrapping() is True
+    assert panel.list_view.viewMode() == QListView.ViewMode.IconMode
+    assert panel.list_view.gridSize().width() > 0
 
 
 def test_panel_recalculates_tile_size_on_resize(qapp, tmp_path):
     panel = ImageLibraryPanel(settings=_LibrarySettings(str(tmp_path)))
-    panel.show()
     panel.set_column_count(2)
+    panel.resize(240, 640)
+    panel.show()
+    qapp.processEvents()
+    # Top-level show() can ignore the first resize; pin the width after it maps.
     panel.resize(240, 640)
     qapp.processEvents()
     tile_narrow = panel.list_view.gridSize().width()
+    viewport_narrow = panel.list_view.viewport().width()
+    assert tile_narrow * 2 <= viewport_narrow - 1
     panel.resize(420, 640)
     qapp.processEvents()
     tile_wide = panel.list_view.gridSize().width()
     assert tile_wide > tile_narrow
     viewport = panel.list_view.viewport().width()
-    assert abs(tile_wide - viewport // 2) <= 1
+    assert tile_wide * 2 <= viewport - 1
+
+
+def test_panel_one_column_tiles_fill_viewport_on_resize(qapp, tmp_path):
+    panel = ImageLibraryPanel(settings=_LibrarySettings(str(tmp_path)))
+    panel.resize(240, 640)
+    panel.show()
+    panel.set_column_count(1)
+    qapp.processEvents()
+    viewport_narrow = panel.list_view.viewport().width()
+    tile_narrow = panel.list_view.gridSize().width()
+    assert tile_narrow == tile_size_for_columns(viewport_narrow, 1)
+    assert tile_narrow == viewport_narrow - 1
+    assert panel.list_view.gridSize().height() == tile_narrow
+    assert panel.list_view.isWrapping() is False
+    assert panel.list_view.flow() == QListView.Flow.TopToBottom
+
+    panel.resize(420, 640)
+    qapp.processEvents()
+    viewport_wide = panel.list_view.viewport().width()
+    tile_wide = panel.list_view.gridSize().width()
+    assert tile_wide > tile_narrow
+    assert tile_wide == tile_size_for_columns(viewport_wide, 1)
+    assert tile_wide == viewport_wide - 1
 
 
 def test_column_count_persists_in_settings(qapp, tmp_path):
