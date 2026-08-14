@@ -50,9 +50,9 @@ CanvasForge v0.7.0-beta.1
 
 Desktop stays PyQt6. The phone is a companion, not a rewrite of [`main.py`](main.py).
 
-- Flutter app under `mobile/` (same shape as Buzz: desktop studio + phone capture).
-- Desktop **Link phone** shows a QR code. The phone stores the link and sends screenshots into the desktop Image Library or canvas.
-- Sync on LAN or Tailscale only. No hosted backend.
+- Desktop **Settings → Mobile → Pair Mobile Device** shows a QR code and a short security code (Buzz-style). The phone stores the link and sends screenshots into the desktop Image Library.
+- Sync on LAN or Tailscale only. No hosted backend. How to run: [docs/mobile-pairing.md](docs/mobile-pairing.md).
+- Phone companion today is the LAN capture page under `mobile/` (iOS/Android browser). Flutter APK later.
 - Android APK first (sideload). Play Store later if it is useful.
 
 ## Phase 3 — Stores and iOS

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>CanvasForge Mobile</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="/icon.png" alt="" width="48" height="48">
+      <div>
+        <h1>CanvasForge</h1>
+        <p class="sub">Capture puck — sends grabs to your desktop library</p>
+      </div>
+    </header>
+
+    <section id="pair-panel">
+      <h2>Pair with desktop</h2>
+      <p>Scan the QR code in <strong>Settings → Mobile → Pair Mobile Device</strong>, or paste the pairing code.</p>
+      <label for="pair-code">Pairing code</label>
+      <input id="pair-code" type="text" autocomplete="off" spellcheck="false" placeholder="192.168.1.10:17831#token">
+      <button id="start-pair" type="button">Use pairing code</button>
+      <div id="sas-box" class="hidden">
+        <p>Confirm this security code matches the desktop:</p>
+        <p id="sas-code" class="sas"></p>
+        <button id="confirm-pair" type="button">Confirm pairing</button>
+        <p id="pair-status" class="status"></p>
+      </div>
+    </section>
+
+    <section id="capture-panel" class="hidden">
+      <h2>Send a screen grab</h2>
+      <p>Grabs land in the same Image Library folder the desktop already watches. You can then Send to Agent from CanvasForge.</p>
+      <label class="file-btn">
+        Choose photo or screenshot
+        <input id="file-input" type="file" accept="image/*">
+      </label>
+      <label class="file-btn secondary">
+        Take photo
+        <input id="camera-input" type="file" accept="image/*" capture="environment">
+      </label>
+      <p id="upload-status" class="status"></p>
+      <button id="unpair" type="button" class="linkish">Forget this desktop</button>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

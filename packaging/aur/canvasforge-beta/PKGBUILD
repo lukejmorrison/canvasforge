@@ -29,6 +29,9 @@ package() {
     featurerequest \
     image_library_panel.py \
     main.py \
+    mobile \
+    mobile_qr.py \
+    mobile_sync.py \
     plugin_manager.py \
     plugins \
     requirements.txt \

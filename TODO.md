@@ -59,9 +59,9 @@ Not a hosted Progressive Web App. Sequence in [docs/pwa-platform-plan.md](docs/p
 
 | Issue | Item |
 |--------|------|
-| [#29](https://github.com/lukejmorrison/canvasforge/issues/29) | Flutter companion under `mobile/` |
-| [#30](https://github.com/lukejmorrison/canvasforge/issues/30) | Desktop Link phone QR pairing |
-| [#31](https://github.com/lukejmorrison/canvasforge/issues/31) | LAN / Tailscale capture sync |
+| [#29](https://github.com/lukejmorrison/canvasforge/issues/29) | Flutter companion under `mobile/` — LAN capture page ships first; Flutter APK still later |
+| [#30](https://github.com/lukejmorrison/canvasforge/issues/30) | Desktop Settings → Mobile QR pairing (LAN companion) |
+| [#31](https://github.com/lukejmorrison/canvasforge/issues/31) | LAN / Tailscale capture sync into Image Library |
 | [#32](https://github.com/lukejmorrison/canvasforge/issues/32) | Android APK |
 | [#33](https://github.com/lukejmorrison/canvasforge/issues/33) | iOS TestFlight (macOS CI) |
 | [#34](https://github.com/lukejmorrison/canvasforge/issues/34) | winget |

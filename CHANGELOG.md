@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Mobile pairing (Buzz-style):** **Edit → Preferences → Mobile → Pair Mobile Device** shows a QR code (“Scan this QR code with the CanvasForge mobile app to securely pair”) and a short security code. The phone scans or pastes the pairing code; both sides confirm the same code. After that, the phone can send grabs without another website. Sync is LAN/Tailscale only — no CanvasForge account. See [docs/mobile-pairing.md](docs/mobile-pairing.md).
+- **Shared grab library:** Phone uploads and desktop **Export Canvas** both write into the Image Library folder the sidebar already watches, so a grab from either device is immediately visible. Open it and use **Send to Agent** as before.
+- **Mobile companion:** A local capture page under `mobile/`, served by the desktop after pairing. Works in iOS Safari and Android Chrome (Flutter APK / TestFlight remain later).
+
 ### Fixed
 - **macOS Monterey launch crash:** Opening the Intel `.app` on 12.7 no longer dies with `EXC_BAD_INSTRUCTION` / SIGILL when leftover Saved Application State exists. The first guard (YES Cocoa delegate before `QApplication()`) was not enough: `sharedApplication` then a YES delegate *is* the AppKit abort, and Qt replaces that delegate anyway. Startup now deletes `~/Library/Saved Application State/com.lukejmorrison.CanvasForge.savedState` before AppKit, writes `NSQuitAlwaysKeepsWindows` / `ApplePersistenceIgnoreState` without loading Cocoa, disables PyInstaller argv-emulation (bootloader NSApplication), and no-ops `NSPersistentUI` restore after `QApplication()`. Linux/Omarchy is unchanged.
 

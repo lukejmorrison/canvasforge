@@ -26,8 +26,11 @@ modules:
       - mkdir -p /app/share/canvasforge
       - install -Dm644 main.py /app/share/canvasforge/main.py
       - install -Dm644 image_library_panel.py /app/share/canvasforge/image_library_panel.py
+      - install -Dm644 mobile_qr.py /app/share/canvasforge/mobile_qr.py
+      - install -Dm644 mobile_sync.py /app/share/canvasforge/mobile_sync.py
       - install -Dm644 plugin_manager.py /app/share/canvasforge/plugin_manager.py
       - install -Dm644 undo_manager.py /app/share/canvasforge/undo_manager.py
+      - cp -r mobile /app/share/canvasforge/
       - install -Dm644 requirements.txt /app/share/canvasforge/requirements.txt
       - cp -r assets /app/share/canvasforge/
       - cp -r plugins /app/share/canvasforge/

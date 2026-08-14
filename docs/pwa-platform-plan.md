@@ -27,9 +27,9 @@ Desktop stays PyQt6. Phone is a capture puck, not the editor.
 
 | Order | Issue | Depends on | Test / deploy |
 |-------|--------|------------|----------------|
-| 6 | [#29](https://github.com/lukejmorrison/canvasforge/issues/29) Flutter `mobile/` | Phase 1 in motion | AVD on Omarchy |
-| 7 | [#30](https://github.com/lukejmorrison/canvasforge/issues/30) QR pairing | #29 | LAN/Tailscale; no public host |
-| 8 | [#31](https://github.com/lukejmorrison/canvasforge/issues/31) Capture sync | #30 | Shared folder first, then local POST |
+| 6 | [#29](https://github.com/lukejmorrison/canvasforge/issues/29) Flutter `mobile/` | Phase 1 in motion | LAN capture page in `mobile/` ships first; Flutter APK later |
+| 7 | [#30](https://github.com/lukejmorrison/canvasforge/issues/30) QR pairing | #29 | Settings → Mobile; LAN/Tailscale; no public host |
+| 8 | [#31](https://github.com/lukejmorrison/canvasforge/issues/31) Capture sync | #30 | Shared Image Library folder + local POST |
 | 9 | [#32](https://github.com/lukejmorrison/canvasforge/issues/32) Android APK | #29 | Sideload from GitHub Release |
 
 ## Phase 3 — stores and iOS
