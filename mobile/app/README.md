@@ -46,6 +46,8 @@ flutter build ios --simulator --no-codesign
 flutter build ios --no-codesign
 ```
 
+Those commands exist only on macOS. A Linux host has no `flutter build ios` subcommand. On Linux, `flutter test` and `flutter build bundle` compile the same Dart; they do not produce `Runner.app`.
+
 A signed IPA / TestFlight upload needs a development team in Xcode (**Signing & Capabilities**). This cloud environment cannot sign an App Store IPA. Bundle id: `com.lukejmorrison.canvasforgeMobile`.
 
 The app uses cleartext HTTP to the desktop on LAN/Tailscale (`NSAllowsLocalNetworking` plus `NSAllowsArbitraryLoads`). That is intentional; there is no public host.

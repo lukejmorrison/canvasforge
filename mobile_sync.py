@@ -12,6 +12,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -54,8 +55,17 @@ def default_store_path() -> Path:
     return app_data_dir() / STORE_FILENAME
 
 
+def resource_root() -> Path:
+    """Checkout directory, or PyInstaller extract dir inside CanvasForge.app."""
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass)
+    return Path(__file__).resolve().parent
+
+
 def companion_dir() -> Path:
-    return Path(__file__).resolve().parent / "mobile"
+    return resource_root() / "mobile"
 
 
 def security_code_from_token(token: str) -> str:
