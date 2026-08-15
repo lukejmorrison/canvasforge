@@ -7,11 +7,25 @@ from pathlib import Path
 block_cipher = None
 ROOT = Path(SPECPATH)
 
+# LAN HTML fallback only — do not ship the Flutter tree inside the .app.
+MOBILE_FALLBACK = (
+    "index.html",
+    "app.js",
+    "style.css",
+    "manifest.webmanifest",
+    "README.md",
+)
+
 datas = [
     (str(ROOT / "assets"), "assets"),
     (str(ROOT / "plugins"), "plugins"),
     (str(ROOT / "artifacts"), "artifacts"),
+    (str(ROOT / "vendor"), "vendor"),
 ]
+for _name in MOBILE_FALLBACK:
+    _src = ROOT / "mobile" / _name
+    if _src.is_file():
+        datas.append((str(_src), "mobile"))
 
 a = Analysis(
     [str(ROOT / "main.py")],
@@ -23,6 +37,12 @@ a = Analysis(
         "undo_manager",
         "plugin_manager",
         "macos_restorable",
+        "mobile_sync",
+        "mobile_qr",
+        "vendor",
+        "vendor.segno",
+        "vendor.segno.encoder",
+        "vendor.segno.consts",
     ],
     hookspath=[],
     hooksconfig={},

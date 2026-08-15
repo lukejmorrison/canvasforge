@@ -30,11 +30,14 @@ The desktop listens on port `17831` on all interfaces. After a device is paired,
 On a Mac (Intel Mini or otherwise):
 
 ```bash
+bash scripts/verify_apple_targets.sh   # tests, then the .app and iOS simulator on Darwin
 bash scripts/build_macos_app.sh
 open dist/CanvasForge.app
 ```
 
 Then **CanvasForge → Settings → Mobile → Pair Mobile Device**. The same LAN listener and Image Library path apply.
+
+`canvasforge.spec` must include `mobile_sync`, `mobile_qr`, `vendor/`, and the `mobile/` HTML fallback (not the Flutter tree). A Linux cloud agent can run the Python and Dart tests plus `flutter build bundle`; it cannot emit `CanvasForge.app` or an IPA.
 
 ## Flutter phone app (iOS and Android)
 
@@ -47,7 +50,7 @@ flutter run -d ios
 flutter run -d android
 ```
 
-Or `bash scripts/build_flutter_mobile.sh` (runs tests; pass `ios`, `ios-simulator`, or `apk` to build).
+Or `bash scripts/build_flutter_mobile.sh` (runs tests; pass `bundle`, `ios`, `ios-simulator`, or `apk` to build). `bundle` compiles Dart on Linux. `ios` / `ios-simulator` need a Mac.
 
 1. Tap **Scan desktop QR code**, or paste the `host:port#token` code.
 2. Confirm the security code matches the desktop, then confirm on the desktop too.

@@ -53,3 +53,4 @@ echo "     Restore leftover com.lukejmorrison.CanvasForge.savedState and confirm
 echo "  2) Select tool: marquee → hand drag → snap back to hole"
 echo "  3) Library scroll with many screenshots"
 echo "  4) Fill / blur / eyedropper feel responsive"
+echo "  5) CanvasForge → Settings → Mobile → Pair Mobile Device shows a QR code and security code"

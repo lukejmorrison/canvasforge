@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Flutter phone app:** `mobile/app` is the iOS and Android companion (one Dart codebase). Scan the desktop QR, confirm the security code, send a screenshot into the Image Library. Build with `flutter run` / `scripts/build_flutter_mobile.sh`. The LAN HTML page under `mobile/` remains a fallback only.
 
 ### Fixed
+- **macOS .app pairing:** The Intel PyInstaller spec now ships `mobile_sync`, the vendored QR encoder, and the LAN HTML fallback, so **Pair Mobile Device** works in `CanvasForge.app` built on a Mac Mini. The frozen app reads those files from the bundle extract dir.
 - **macOS Monterey launch crash:** Opening the Intel `.app` on 12.7 no longer dies with `EXC_BAD_INSTRUCTION` / SIGILL when leftover Saved Application State exists. The first guard (YES Cocoa delegate before `QApplication()`) was not enough: `sharedApplication` then a YES delegate *is* the AppKit abort, and Qt replaces that delegate anyway. Startup now deletes `~/Library/Saved Application State/com.lukejmorrison.CanvasForge.savedState` before AppKit, writes `NSQuitAlwaysKeepsWindows` / `ApplePersistenceIgnoreState` without loading Cocoa, disables PyInstaller argv-emulation (bootloader NSApplication), and no-ops `NSPersistentUI` restore after `QApplication()`. Linux/Omarchy is unchanged.
 
 ## [0.6.0-beta.12] - 2026-08-13
