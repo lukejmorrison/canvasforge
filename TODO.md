@@ -23,6 +23,7 @@ Knock-off order: **0.6.0-beta.12** Image Library → **0.6.0-beta.13** (T1, mayb
 
 | ID | Issue |
 |----|--------|
+| — | [#48](https://github.com/lukejmorrison/canvasforge/issues/48) SIGABRT on quit during QGraphicsScene teardown |
 | T1 | [#12](https://github.com/lukejmorrison/canvasforge/issues/12) Shape stretching (edge handles non-uniform) |
 | T2 | [#13](https://github.com/lukejmorrison/canvasforge/issues/13) Fill polish (shapes / cutouts) — confirm scope first |
 
