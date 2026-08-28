@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Flutter phone app:** `mobile/app` is the iOS and Android companion (one Dart codebase). Scan the desktop QR, confirm the security code, send a screenshot into the Image Library. Build with `flutter run` / `scripts/build_flutter_mobile.sh`. The LAN HTML page under `mobile/` remains a fallback only.
 
 ### Fixed
+- **Quit abort (SIGABRT):** Closing the window with images on the canvas no longer dumps core. The scene is parented to the main window and selection slots are disconnected in `closeEvent` so PyQt's SIP atexit teardown cannot fire `selectionChanged` into dying widgets. ([#48](https://github.com/lukejmorrison/canvasforge/issues/48))
 - **macOS Monterey launch crash:** Opening the Intel `.app` on 12.7 no longer dies with `EXC_BAD_INSTRUCTION` / SIGILL when leftover Saved Application State exists. The first guard (YES Cocoa delegate before `QApplication()`) was not enough: `sharedApplication` then a YES delegate *is* the AppKit abort, and Qt replaces that delegate anyway. Startup now deletes `~/Library/Saved Application State/com.lukejmorrison.CanvasForge.savedState` before AppKit, writes `NSQuitAlwaysKeepsWindows` / `ApplePersistenceIgnoreState` without loading Cocoa, disables PyInstaller argv-emulation (bootloader NSApplication), and no-ops `NSPersistentUI` restore after `QApplication()`. Linux/Omarchy is unchanged.
 
 ## [0.6.0-beta.12] - 2026-08-13

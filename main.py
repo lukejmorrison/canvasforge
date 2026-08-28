@@ -3265,7 +3265,7 @@ class CanvasView(QGraphicsView):
                 rect = rect.united(item.sceneBoundingRect())
             return rect
         canvas = getattr(self.main_window, "canvas_bounds_item", None)
-        if canvas:
+        if canvas and not sip.isdeleted(canvas):
             return QRectF(canvas.rect())
         return QRectF()
 
@@ -6828,7 +6828,7 @@ class MainWindow(QMainWindow):
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self.setCentralWidget(self._splitter)
 
-        self.scene = QGraphicsScene()
+        self.scene = QGraphicsScene(self)
         self.scene.selectionChanged.connect(self.on_scene_selection_changed)
         canvas_x = float(self.settings.value("canvas/workspace_x", 0))
         canvas_y = float(self.settings.value("canvas/workspace_y", 0))
@@ -8188,23 +8188,35 @@ class MainWindow(QMainWindow):
         self.scene.blockSignals(False)
 
     def on_scene_selection_changed(self):
-        self.layer_list.blockSignals(True)
-        self.layer_list.clearSelection()
+        layer_list = getattr(self, "layer_list", None)
+        scene = getattr(self, "scene", None)
+        if layer_list is None or sip.isdeleted(layer_list):
+            return
+        if scene is None or sip.isdeleted(scene):
+            return
         try:
-            selected_items = self.scene.selectedItems()
+            layer_list.blockSignals(True)
+            layer_list.clearSelection()
+            selected_items = scene.selectedItems()
             if selected_items:
-                for i in range(self.layer_list.count()):
-                    list_item = self.layer_list.item(i)
+                for i in range(layer_list.count()):
+                    list_item = layer_list.item(i)
                     graphics_item = list_item.data(Qt.ItemDataRole.UserRole)
-                    # Check if C++ object is still valid
                     if graphics_item and not sip.isdeleted(graphics_item):
                         if graphics_item in selected_items:
                             list_item.setSelected(True)
         except RuntimeError:
-            # Handle case where scene or items are deleted
+            return
+        finally:
+            try:
+                if layer_list is not None and not sip.isdeleted(layer_list):
+                    layer_list.blockSignals(False)
+            except RuntimeError:
+                pass
+        try:
+            self._sync_text_format_controls()
+        except RuntimeError:
             pass
-        self.layer_list.blockSignals(False)
-        self._sync_text_format_controls()
 
     def flatten_selected(self):
         items = self._selected_layer_items()
@@ -9111,7 +9123,38 @@ class MainWindow(QMainWindow):
         if hasattr(self, "mobile_sync") and self.mobile_sync is not None:
             self.mobile_sync.stop()
 
+        self._teardown_scene_on_close()
         super().closeEvent(event)
+
+    def _teardown_scene_on_close(self):
+        """Drop scene slots and items while Python is still alive.
+
+        An unparented QGraphicsScene otherwise survives until SIP atexit
+        cleanup. Destroying a selected pixmap item then emits
+        selectionChanged into on_scene_selection_changed, and PyQt aborts
+        on the uncaught slot exception (SIGABRT). See issue #48.
+        """
+        scene = getattr(self, "scene", None)
+        layer_list = getattr(self, "layer_list", None)
+        if layer_list is not None and not sip.isdeleted(layer_list):
+            try:
+                layer_list.itemSelectionChanged.disconnect(self.on_layer_selection_changed)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                layer_list.blockSignals(True)
+            except RuntimeError:
+                pass
+        if scene is None or sip.isdeleted(scene):
+            return
+        try:
+            scene.selectionChanged.disconnect(self.on_scene_selection_changed)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            scene.blockSignals(True)
+        except RuntimeError:
+            pass
 
 
 if __name__ == "__main__":

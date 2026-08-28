@@ -3,6 +3,7 @@ screenshots/
 pasted_logs/
 venv/
 .venv/
+.pytest-deps/
 .vscode/
 __pycache__/
 output.log
