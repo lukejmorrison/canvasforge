@@ -42,6 +42,8 @@ Agents must not claim a task is complete until the applicable checks below pass 
 | Changelog | User-facing changes listed in `CHANGELOG.md` |
 | Issue | Linked GitHub Issue; close it only when the work is in the tagged beta |
 
+- This repo is public. When a change alters anything a user can see, add or refresh a screenshot in README.md (images in docs/screenshots/, relative links). The README is the marketing.
+
 ### Two install trees
 
 | Tree | Paths | When to use |
